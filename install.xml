@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+    <name>SC Modification</name>
+    <code>SafeCharge</code>
+    <version>1.0</version>
+    <author>SafeCharge</author>
+    <link>https://www.safecharge.com/</link>
+    
+    <!-- get the SC GW Settings and replace view file if there are SC GW Settings, info() -->
+    <file path="admin/controller/sale/order.php">
+        <operation>
+            <search><![CDATA[$this->response->setOutput($this->load->view('sale/order_info', $data));]]></search>
+            <add position="replace"><![CDATA[
+                // SC Modification
+                $this->load->model('setting/setting');
+                $sc_gw_settings = array();
+                $setting_prefix = '';
+                
+                if(is_readable(
+                    DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'
+                        . DIRECTORY_SEPARATOR. 'sc_version_resolver.php')
+                ) {
+                    require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR
+                        .'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
+                    
+                    $setting_prefix = SafeChargeVersionResolver::get_settings_prefix();
+                
+                    $sc_gw_settings = @$this->model_setting_setting->getSetting(
+                        trim($setting_prefix, '_')
+                    );
+                }
+                
+                if($sc_gw_settings) {
+                    require_once DIR_SYSTEM. 'config'. DIRECTORY_SEPARATOR. 'sc_config.php';
+                    require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR
+                        . 'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
+                
+                    $data['token_name'] = SafeChargeVersionResolver::get_token_name();
+                    $data['ctr_path'] = SafeChargeVersionResolver::get_ctr_file_path();
+                    
+                    $data['sc_gw_tr_type']      = @$sc_gw_settings[$setting_prefix . 'transaction_type'];
+                    $data['order_resp_tr_type'] = '';
+                    $data['remainingTotal']     = $order_info['total'];
+                
+                    $query = $this->db->query('SELECT * FROM sc_refunds WHERE approved = 1 AND orderId = ' . intval($order_id));
+                    if(@$query->rows) {
+                        $data['refunds'] = $query->rows;
+                    }
+                    else {
+                        $data['refunds'] = array();
+                    }
+
+                    if(!empty($order_info['payment_custom_field'])) {
+                        $payment_custom_fields = is_array($order_info['payment_custom_field'])
+                            ? $order_info['payment_custom_field'] : json_decode($order_info['payment_custom_field'], true);
+
+                        $data['order_resp_tr_type'] = @$payment_custom_fields[SC_GW_P3D_RESP_TR_TYPE]
+                            ? $payment_custom_fields[SC_GW_P3D_RESP_TR_TYPE] : '';
+                        
+                        $data['paymentMethod'] = $payment_custom_fields['_paymentMethod'];
+                    }
+                
+                    // prepare and pass refund data to the view
+                    if($data['refunds']) {
+                        foreach($data['refunds'] as $key => $refund) {
+                            $data['remainingTotal'] -= $refund['amount'];
+                            // present amounts as formated minus values
+                            $data['refunds'][$key]['amount_curr'] = '-' . $this->currency->format(
+                                $refund['amount'],
+                                $order_info['currency_code'],
+                                $order_info['currency_value']
+                            );
+                        }
+                
+                        $data['remainingTotalCurr'] = $this->currency->format(
+                            $data['remainingTotal'],
+                            $order_info['currency_code'],
+                            $order_info['currency_value']
+                        );
+                    }
+
+                    $this->response->setOutput($this->load->view('extension/sale/sc_order_info', $data));
+                }
+                else {
+                    $this->response->setOutput($this->load->view('sale/order_info', $data));
+                }
+                // SC Modification END
+            ]]></add>
+        </operation>
+    </file>
+    
+    <!-- modify file again to preview net Total (after refunds) in the Orders list -->
+    <file path="admin/controller/sale/order.php">
+        <operation>
+            <search><![CDATA[
+                if (isset($this->error['warning'])) {
+            ]]></search>
+            
+            <add position="before"><![CDATA[
+                // SC Modification
+                foreach($results as $key => $order) {
+                    $refunds_sum = 0;
+
+                    $query = $this->db->query('SELECT * FROM sc_refunds WHERE orderId = ' . intval($order['order_id']));
+                    if(@$query->rows) {
+                        $sc_refunds = $query->rows;
+                    }
+                    else {
+                        $sc_refunds = array();
+                    }
+
+                    if(is_array($sc_refunds) && $sc_refunds) {
+                        foreach($sc_refunds as $ref) {
+                            $refunds_sum += $ref['amount'];
+                        }
+
+                        $data['orders'][$key]['total'] = $this->currency->format(
+                            ($order['total'] - $refunds_sum),
+                            $order['currency_code'],
+                            $order['currency_value']
+                        );
+                    }
+                }
+                // SC Modification END
+            ]]></add>
+        </operation>
+    </file>
+    
+    <!-- modify Orde Model to get from the DB o.payment_custom_field, -->
+    <file path="admin/model/sale/order.php">
+        <operation>
+            <search><![CDATA[CONCAT(o.firstname, ' ', o.lastname) AS customer,]]></search>
+            <add position="replace"><![CDATA[
+                CONCAT(o.firstname, ' ', o.lastname) AS customer, o.payment_custom_field,
+            ]]></add>
+        </operation>
+    </file>
+    
+    <!-- add translations for the buttons logic -->
+    <file path="admin/language/en-gb/sale/order.php">
+        <operation>
+            <search><![CDATA[// Text]]></search>
+            <add position="after"><![CDATA[
+                $_['sc_order_confirm_cancel']   = 'Are you sure, you want to Cancel Order';
+                $_['sc_btn_void']               = 'Void';
+                $_['sc_order_confirm_settle']   = 'Are you sure, you want to Settle Order';
+                $_['sc_btn_settle']             = 'Settle';
+                $_['sc_order_confirm_refund']   = 'Are you sure, you want to Refund Order';
+                $_['sc_btn_refund']             = 'Refund via SafeCharge';
+                $_['sc_btn_manual_refund']      = 'Manual Refund';
+                $_['sc_refund_amount']          = 'Refund Amount';
+                $_['sc_more_actions']           = 'More Actions';
+                $_['sc_refund_amount_error']    = 'The refund amount must be a number bigger than 0!';
+                $_['sc_refund_id']              = 'Refund ID';
+                $_['sc_date']                   = 'Date';
+                $_['sc_amount']                 = 'Amount';
+                $_['sc_remaining_total']        = 'Remaining Total';
+            ]]></add>
+        </operation>
+    </file>
+</modification>
