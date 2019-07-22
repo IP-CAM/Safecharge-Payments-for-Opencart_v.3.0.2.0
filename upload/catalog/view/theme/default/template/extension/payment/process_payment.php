@@ -26,7 +26,8 @@
                         $("#sc_payment_form").submit();
                     });
                 </script>
-            <?php elseif(@$data['redirectURL'] && @$data['pendingURL']):?>
+            <?php elseif(@$data['redirectURL'] && @$data[''
+                . '']):?>
                 <script type="text/javascript">
                     window.location.href = "<?= $data['redirectURL']; ?>";
                 </script>

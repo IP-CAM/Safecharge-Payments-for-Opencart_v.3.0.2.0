@@ -1,6 +1,11 @@
 <?php
 
+if (!session_id()) {
+    session_start();
+}
+
 require_once DIR_SYSTEM. 'config'. DIRECTORY_SEPARATOR. 'sc_config.php';
+require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_logger.php';
 require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
 
 class ControllerExtensionPaymentSafeCharge extends Controller
@@ -10,9 +15,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         $this->load->model('checkout/order');
 		$this->load->model('account/reward');
         
-    //    $ctr_file_path = SafeChargeVersionResolver::get_ctr_file_path();
         $ctr_file_path = $ctr_url_path = SafeChargeVersionResolver::get_ctr_file_path();
-    //    $ctr_url_path = SafeChargeVersionResolver::get_public_ctr_file_path();
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
 		
         $this->language->load($ctr_file_path);
@@ -30,31 +33,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		$settings['test']               = $this->config->get($settigs_prefix . 'test_mode');
 		$settings['hash_type']          = $this->config->get($settigs_prefix . 'hash_type');
 		$settings['force_http']         = $this->config->get($settigs_prefix . 'force_http');
-		$settings['create_logs']        = $this->session->data['create_logs'] = 
-            $this->config->get($settigs_prefix . 'create_logs');
-        
-        // client request id 1
-        $time = date('YmdHis', time());
-        $settings['cri1'] = $time. '_' .uniqid();
-        
-        // checksum 1 - checksum for session token
-        $settings['cs1'] = hash(
-            $settings['hash_type'],
-            $settings['merchant_id'] . $settings['merchantsite_id']
-                . $settings['cri1'] . $time . $settings['secret_key']
-        );
-        
-        // client request id 2
-        $time = date('YmdHis', time());
-        $settings['cri2'] = $time. '_' .uniqid();
-        
-        // checksum 2 - checksum for get apms
-        $time = date('YmdHis', time());
-        $settings['cs2'] = hash(
-            $settings['hash_type'],
-            $settings['merchant_id'] . $settings['merchantsite_id']
-                . $settings['cri2'] . $time . $settings['secret_key']
-        );
+		$settings['create_logs']        = $this->session->data['create_logs']
+                                        = $_SESSION['create_logs']
+                                        = $this->config->get($settigs_prefix . 'create_logs');
         # get GW settings to call REST API later END
         
         $countriesWithStates = array('US', 'IN', 'CA');
@@ -93,7 +74,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $params['notify_url'] = str_replace('https://', 'http://', $params['notify_url']);
         }
         
-        $params['invoice_id']           = $this->session->data['order_id'].'_'.$time;
+        $params['invoice_id']           = $this->session->data['order_id'].'_'.date('YmdHis', time());
 		$params['merchant_unique_id']   = $this->session->data['order_id'];
 
         $params['first_name']   = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_firstname']));
@@ -145,15 +126,71 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         if($settings['payment_api'] == 'rest') {
             require_once DIR_SYSTEM . 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR . 'SC_REST_API.php';
             
-            $settings['merchantId']     = $settings['merchant_id'];
-            $settings['merchantSiteId'] = $settings['merchantsite_id'];
+            $settings['merchantId'] = $settings['merchant_id'];
+            $data['merchantSiteId'] = $settings['merchantSiteId'] = $settings['merchantsite_id'];
             
             // for the REST set one combined item only
             $params['items[0][name]']      = $this->session->data['order_id'];
             $params['items[0][price]']     = $params['total_amount'];
             $params['items[0][quantity]']  = 1;
             
-            // get APMs
+            # get UPOs
+            $data['upos'] = array();
+            
+            if((bool)$this->customer->isLogged()) {
+                $time = date('YmdHis', time());
+                
+                $upos_data = SC_REST_API::get_user_upos(
+                    array(
+                        'merchantId'        => $settings['merchantId'],
+                        'merchantSiteId'    => $settings['merchantSiteId'],
+                        'userTokenId'       => $params['email'],
+                        'clientRequestId'   => $time . '_' . uniqid(),
+                        'timeStamp'         => $time,
+                    ),
+                    array(
+                        'hash_type' => $settings['hash_type'],
+                        'secret'    => $settings['secret_key'],
+                        'test'      => $settings['test'],
+                    )
+                );
+
+                if(isset($upos_data['paymentMethods']) && $upos_data['paymentMethods']) {
+                    foreach($upos_data['paymentMethods'] as $upo_data) {
+                        if(
+                            $upo_data['upoStatus'] == 'enabled'
+                            && strtotime(@$upo_data['expiryDate']) > strtotime(date('Ymd'))
+                        ) {
+                            $data['upos'][] = $upo_data;
+                        }
+                    }
+                }
+            }
+            
+            # get APMs
+            // client request id 1
+            $time = date('YmdHis', time());
+            $settings['cri1'] = $time. '_' .uniqid();
+
+            // checksum 1 - checksum for session token
+            $settings['cs1'] = hash(
+                $settings['hash_type'],
+                $settings['merchant_id'] . $settings['merchantsite_id']
+                    . $settings['cri1'] . $time . $settings['secret_key']
+            );
+
+            // client request id 2
+            $time = date('YmdHis', time());
+            $settings['cri2'] = $time. '_' .uniqid();
+
+            // checksum 2 - checksum for get apms
+            $time = date('YmdHis', time());
+            $settings['cs2'] = hash(
+                $settings['hash_type'],
+                $settings['merchant_id'] . $settings['merchantsite_id']
+                    . $settings['cri2'] . $time . $settings['secret_key']
+            );
+            
             $res = SC_REST_API::get_rest_apms($settings);
             
             // set template data with the payment methods
@@ -162,51 +199,48 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $data['payment_methods'] = $res['paymentMethods'];
             }
             else {
-                $this->create_log($res, 'API response: ');
+                SC_LOGGER::create_log($res, 'API response: ');
                 
                 echo
                     '<script type="text/javascript">location.href = "'
                         . $this->url->link($ctr_url_path . '/fail') . '";</script>';
                 exit;
             }
+            # get APMs END
             
-            // we need to check for CCV field in cc_card method, if miss, add it
-            foreach($data['payment_methods'] as $key => $pm) {
-                if(in_array($pm['paymentMethod'], array('cc_card', 'paydotcom'))) {
-                    $is_ccv_field = false;
-                    
-                    foreach($pm['fields'] as $field) {
-                        if($field['name'] == 'CVV') {
-                            $is_ccv_field = true;
-                            break;
+            // add icons for the upos
+            $data['icons'] = array();
+
+            if($data['upos'] && $data['payment_methods']) {
+                foreach($data['upos'] as $upo_key => $upo) {
+                    if(!@$upo['upoData']['uniqueCC']) {
+                        unset($data['upos'][$upo_key]);
+                        continue;
+                    }
+
+                    // search in payment methods
+                    foreach($data['payment_methods'] as $pm) {
+                        if(@$pm['paymentMethod'] == @$upo['paymentMethodName']) {
+                            if(
+                                in_array(@$upo['paymentMethodName'], array('cc_card', 'dc_card'))
+                                && @$upo['upoData']['brand']
+                            ) {
+                                $data['icons'][@$upo['upoData']['brand']] = str_replace(
+                                    'default_cc_card',
+                                    $upo['upoData']['brand'],
+                                    $pm['logoURL']
+                                );
+
+                                break;
+                            }
+                            else {
+                                $data['icons'][$pm['paymentMethod']] = $pm['logoURL'];
+                                break;
+                            }
                         }
                     }
-                    
-                    // add the field
-                    if(!$is_ccv_field) {
-                        $data['payment_methods'][$key]['fields'][] = array(
-                            'name' => 'CVV',
-                            'regex' => '^[0-9]{3,4}$',
-                            'type' => 'text',
-                            'validationmessage' => array(
-                                0 => array(
-                                    'message' => 'CVV must be 3 or 4 digits!',
-                                    'language' => 'en'
-                                )
-                            ),
-                            'caption' => array(
-                                0 => array(
-                                    'message' => 'CVV Number',
-                                    'language' => 'en'
-                                )
-                            )
-                        );
-                    }
-                    
-                    break;
                 }
             }
-            // we need to check for CCV field in cc_card method, if miss, add it END
             
             // specific data for the REST payment
             $params['client_request_id']    = $time .'_'. uniqid();
@@ -224,9 +258,36 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 )
             );
             
-            unset($settings['secret_key']);
+            // params for last get_session_token
+            $time = date('YmdHis', time());
+            $un_req_id = uniqid();
+            $st_cs = hash(
+                $settings['hash_type'],
+                $settings['merchant_id'] . $settings['merchantsite_id']
+                    . $un_req_id . $time . $settings['secret_key']
+            );
             
+            $resp = SC_REST_API::get_session_token(array(
+                'merchantId'        => $settings['merchantId'],
+                'merchantSiteId'    => $settings['merchantSiteId'],
+                'cri1'              => $un_req_id,
+                'cs1'               => $st_cs,
+                'timeStamp'         => $time,
+                'test'              => $settings['test'],
+            ));
+            
+            if(!$resp || !isset($resp['sessionToken']) || !$resp['sessionToken']) {
+                SC_LOGGER::create_log('Error when trying to generate Session Token for Fields! ');
+//                echo '<script type="text/javascript">location.href = "'
+//                    . $this->url->link($ctr_url_path . '/fail') . '";</script>';
+//                exit;
+            }
+            
+            unset($settings['secret_key']);
             $this->session->data['SC_Settings'] = $settings;
+
+            $data['sessionToken']   = $resp['sessionToken'];
+            $data['scLocale']       = substr($params['merchantLocale'], 0, 2);
             
             $data['action'] = $this->url->link($ctr_url_path . '/process_payment')
                 . '&create_logs=' . ($settings['create_logs']);
@@ -330,9 +391,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $test_diff = $items_price + $params['handling'] - $discount_total - $params['total_amount'];
             
             if($test_diff != 0) {
-                $this->create_log($params['handling'], 'handling before $test_diff: ');
-                $this->create_log($discount_total, 'discount_total before $test_diff: ');
-                $this->create_log($test_diff, '$test_diff: ');
+                SC_LOGGER::create_log($params['handling'], 'handling before $test_diff: ');
+                SC_LOGGER::create_log($discount_total, 'discount_total before $test_diff: ');
+                SC_LOGGER::create_log($test_diff, '$test_diff: ');
                 
                 if($test_diff > 0) {
                     if($params['handling'] - $test_diff >= 0) {
@@ -370,16 +431,22 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             
             $data['html_inputs'] = $params;
         //    echo '<pre>'.print_r($params, true).'</pre>';
-            $this->create_log($data['html_inputs'], 'Cashier inputs: ');
+            SC_LOGGER::create_log($data['html_inputs'], 'Cashier inputs: ');
         }
 		
         // data for the template
 		$data['payment_api']        = $settings['payment_api'];
 		$data['sc_test_env']        = $settings['test'];
+        
         // texts
+		$data['sc_attention']       = $this->language->get('Attention!');
+		$data['sc_go_to_step_2_error'] =
+            $this->language->get('You must confirm all steps starting from Step 2, to get correct APMs!');
 		$data['button_confirm']     = $this->language->get('button_confirm');
 		$data['sc_btn_loading']     = $this->language->get('Loading...');
-        $data['sc_pms_title']       = $this->language->get('Choose your preferred payment method');
+        $data['sc_upos_title']      = $this->language->get('Choose from you prefered payment methods');
+        $data['sc_pms_title']       = $this->language->get('Choose from the other payment methods');
+        $data['choose_pm_error']    = $this->language->get('Please, choose payment method and fill all its fields!');
         $data['rest_no_apms_error'] = $this->language->get('rest_no_apms_error');
         $data['sc_token_error']     = $this->language->get('Error in Tokenization process.');
         $data['sc_token_error_2']   = $this->language->get('Error when try to proceed the payment. Please, check you fields!');
@@ -396,11 +463,11 @@ class ControllerExtensionPaymentSafeCharge extends Controller
     // on success add history note for the order
     public function success()
     {
-        $this->create_log('success page');
+        SC_LOGGER::create_log('success page');
         
         $this->load->model('checkout/order');
-    //    $this->create_log($this->session->data, 'success, session.');
-    //    $this->create_log($_REQUEST, 'success, $_REQUEST.');
+    //    SC_LOGGER::create_log($this->session->data, 'success, session.');
+    //    SC_LOGGER::create_log($_REQUEST, 'success, $_REQUEST.');
         
         # P3D case 1 - response form issuer/bank
         if(
@@ -439,7 +506,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function fail()
 	{
-        $this->create_log(@$_REQUEST, 'Order FAIL: ');
+        SC_LOGGER::create_log(@$_REQUEST, 'Order FAIL: ');
         
 		$arr = explode("_", @$_REQUEST['invoice_id']);
 		$order_id  = intval($arr[0]);
@@ -460,10 +527,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
 	public function callback()
     {
-        $this->create_log(@$_REQUEST, 'DMN request: ');
+        SC_LOGGER::create_log(@$_REQUEST, 'DMN request: ');
         
         if(!$this->checkAdvancedCheckSum()) {
-            $this->create_log('', 'DMN report: You receive DMN from not trusted source. The process ends here.');
+            SC_LOGGER::create_log('', 'DMN report: You receive DMN from not trusted source. The process ends here.');
             exit;
         }
         
@@ -478,32 +545,32 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             isset($_REQUEST['transactionType'], $_REQUEST['invoice_id'])
             && in_array($_REQUEST['transactionType'], array('Sale', 'Auth'))
         ) {
-            $this->create_log('', 'A sale/auth.');
+            SC_LOGGER::create_log('', 'A sale/auth.');
             $order_id = 0;
             
             // Cashier
             if(!empty($_REQUEST['invoice_id'])) {
-                $this->create_log('', 'Cashier sale.');
+                SC_LOGGER::create_log('', 'Cashier sale.');
                 
                 try {
                     $arr = explode("_", $_REQUEST['invoice_id']);
                     $order_id  = intval($arr[0]);
                 }
                 catch (Exception $ex) {
-                    $this->create_log($ex->getMessage(), 'Cashier DMN Exception when try to get Order ID: ');
+                    SC_LOGGER::create_log($ex->getMessage(), 'Cashier DMN Exception when try to get Order ID: ');
                     echo 'DMN Exception: ' . $ex->getMessage();
                     exit;
                 }
             }
             // REST
             else {
-                $this->create_log('', 'REST sale.');
+                SC_LOGGER::create_log('REST sale.');
                 
                 try {
                     $order_id = intval($_REQUEST['merchant_unique_id']);
                 }
                 catch (Exception $ex) {
-                    $this->create_log($ex->getMessage(), 'REST DMN Exception when try to get Order ID: ');
+                    SC_LOGGER::create_log($ex->getMessage(), 'REST DMN Exception when try to get Order ID: ');
                     echo 'DMN Exception: ' . $ex->getMessage();
                     exit;
                 }
@@ -521,7 +588,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 }
             }
             catch (Exception $ex) {
-                $this->create_log($ex->getMessage(), 'Sale DMN Exception: ');
+                SC_LOGGER::create_log($ex->getMessage(), 'Sale DMN Exception: ');
                 echo 'DMN Exception: ' . $ex->getMessage();
                 exit;
             }
@@ -538,12 +605,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 || in_array(@$_REQUEST['transactionType'], array('Credit', 'Refund')))
             && !empty($req_status)
         ) {
-            $this->create_log('OpenCart Refund DMN.');
+            SC_LOGGER::create_log('OpenCart Refund DMN.');
             
             $order_info = $this->model_checkout_order->getOrder(@$_REQUEST['order_id']);
             
             if(!$order_info) {
-                $this->create_log($order_info, 'There is no order info: ');
+                SC_LOGGER::create_log($order_info, 'There is no order info: ');
                     
                 $this->model_checkout_order->addOrderHistory(
                     @$_REQUEST['order_id'],
@@ -569,7 +636,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             && $_REQUEST['order_id'] != ''
             && in_array($_REQUEST['transactionType'], array('Void', 'Settle'))
         ) {
-            $this->create_log($_REQUEST['transactionType'], 'Void/Settle transactionType: ');
+            SC_LOGGER::create_log($_REQUEST['transactionType'], 'Void/Settle transactionType: ');
             
             try {
                 $order_info = $this->model_checkout_order->getOrder($_REQUEST['order_id']);
@@ -581,14 +648,14 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $this->change_order_status(intval(@$_REQUEST['order_id']), $req_status, $_REQUEST['transactionType']);
             }
             catch (Exception $ex) {
-                $this->create_log(
+                SC_LOGGER::create_log(
                     $ex->getMessage(),
                     'callback() Void/Settle Exception: '
                 );
             }
         }
         
-        $this->create_log('', 'Callback end. ');
+        SC_LOGGER::create_log('', 'Callback end. ');
         
         echo 'DMN received.';
         exit;
@@ -618,7 +685,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function process_payment()
     {
-        $this->create_log('process_payment()');
+        SC_LOGGER::create_log('process_payment()');
         
         $ctr_file_path  = SafeChargeVersionResolver::get_ctr_file_path();
         $ctr_url_path   = SafeChargeVersionResolver::get_public_ctr_file_path();
@@ -652,26 +719,34 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             }
 
             $payment_method = 'apm'; // set the payment method type
-            // add the info for the payment method
-            $sc_settings['APM_data']['payment_method'] = $params['payment_method_sc'];
             
-            if(in_array($params['payment_method_sc'], array('cc_card' ,'dc_card'))) {
+            // user selected UPO - we get the ID
+            if(is_numeric($params['payment_method_sc'])) {
+                $payment_method = 'd3d';
+
+                $sc_settings['userPaymentOption'] = array(
+                    'userPaymentOptionId'   => $params['payment_method_sc'],
+                    'CVV'                   => $params['upo_cvv_field_' . $params['payment_method_sc']],
+                );
+            }
+            // user selected APM - we get the name
+            elseif(in_array($params['payment_method_sc'], array('cc_card' ,'dc_card'))) {
+                $payment_method = 'd3d';
+                
                 // mark the Order as not APM paid
                 $params['urlDetails']['notificationUrl'] .= '&is-apm=0';
                 
-                $payment_method = 'd3d';
-                
-                $sc_settings['APM_data']['apm_fields'] = array(
-                    'ccCardNumber'      => $params['cc_card']['ccCardNumber'],
-                    'CVV'               => $params['cc_card']['CVV'],
-                    'ccNameOnCard'      => $params['cc_card']['ccNameOnCard'],
-                );
+                $sc_settings['APM_data']['payment_method'] = $params['payment_method_sc'];
+                $sc_settings['APM_data']['apm_fields']['ccTempToken'] =
+                    $params[$params['payment_method_sc']]['ccTempToken'];
             }
             // if payment method has other fields add them
             elseif(
                 isset($params[$params['payment_method_sc']])
                 && is_array($params[$params['payment_method_sc']])
             ) {
+                $sc_settings['APM_data']['payment_method'] = $params['payment_method_sc'];
+                
                 foreach($params[$params['payment_method_sc']] as $field => $val) {
                     $sc_settings['APM_data']['apm_fields'][$field] = $val;
                 }
@@ -679,7 +754,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             
             unset($params['route']);
             
-            $this->create_log($payment_method, 'payment_method: ');
+            SC_LOGGER::create_log($payment_method, 'payment_method: ');
             
             $resp = SC_REST_API::process_payment(
                 $params
@@ -761,17 +836,21 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                             'email'             => $params['email'],
                             'county'            => '',
                         ),
-                        'cardData'          => array(
-                            'ccTempToken'       => $sc_settings['APM_data']['apm_fields']['ccCardNumber'],
-                            'CVV'               => $sc_settings['APM_data']['apm_fields']['CVV'],
-                            'cardHolderName'    => $sc_settings['APM_data']['apm_fields']['ccNameOnCard'],
-                        ),
                         'paResponse'        => '',
-                        'urlDetails'        => array('notificationUrl' => $params['urlDetails']),
+                    //    'urlDetails'        => $params['urlDetails'],
                         'timeStamp'         => $params['time_stamp'],
                         'checksum'          => $params['checksum'],
                         'webMasterId'       => $params['webMasterId'],
                     );
+                    
+                    $params_p3d['urlDetails']['notificationUrl'] = $params['urlDetails']['notificationUrl'];
+                    
+                    if(isset($sc_settings['APM_data']['apm_fields']['ccTempToken'])) {
+                        $params_p3d['cardData']['ccTempToken'] = $sc_settings['APM_data']['apm_fields']['ccTempToken'];
+                    }
+                    elseif(isset($sc_settings['userPaymentOption'])) {
+                        $params_p3d['userPaymentOption'] = $sc_settings['userPaymentOption'];
+                    }
                     
                     $this->session->data['SC_P3D_Params'] = $params_p3d;
                     
@@ -781,8 +860,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         && !empty($resp['acsUrl'])
                         && intval($resp['threeDFlow']) == 1
                     ) {
-                        $this->create_log('D3D case 1');
-                        $this->create_log($resp['acsUrl'], 'acsUrl: ');
+                        SC_LOGGER::create_log('D3D case 1');
+                        SC_LOGGER::create_log($resp['acsUrl'], 'acsUrl: ');
                     
                         // step 1 - go to acsUrl, it will return us to Pending page
                         $data['acsUrl']     = $resp['acsUrl'];
@@ -790,13 +869,13 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         // it is also pending page
                         $data['TermUrl']    = $params['success_url'] . '&create_logs=' . @$_REQUEST['create_logs'];
                         
-                        $this->create_log($data, 'params for acsUrl: ');
+                        SC_LOGGER::create_log($data, 'params for acsUrl: ');
                         
                         // step 2 - wait for the DMN
                     }
                     // case 2
                     elseif(isset($resp['threeDFlow']) && intval($resp['threeDFlow']) == 1) {
-                        $this->create_log('process_payment() D3D case 2.');
+                        SC_LOGGER::create_log('process_payment() D3D case 2.');
                         $this->pay_with_d3d_p3d(@$params['webMasterId']); // we exit there
                     }
                     // case 3 do nothing
@@ -853,7 +932,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             ));
         }
         catch (Exception $ex) {
-            $this->create_log($ex->getMessage(), 'process_payment Exception: ');
+            SC_LOGGER::create_log($ex->getMessage(), 'process_payment Exception: ');
             $this->response->redirect($params['error_url']);
         }
     }
@@ -864,20 +943,23 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function pay_with_d3d_p3d()
     {
-        $this->create_log('pay_with_d3d_p3d');
+        SC_LOGGER::create_log('pay_with_d3d_p3d');
         
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
-        
-        $this->session->data['SC_P3D_Params']['paResponse'] = $_REQUEST['PaRes'];
         $p3d_resp = false;
         
+        if(isset($_REQUEST['PaRes'])) {
+            $this->session->data['SC_P3D_Params']['paResponse'] = $_REQUEST['PaRes'];
+        }
+        
         try {
+            $this->load->model('checkout/order');
             $order_info = $this->model_checkout_order->getOrder($this->session->data['SC_P3D_Params']['clientUniqueId']);
 
             $sc_P3D_Params = $this->session->data['SC_P3D_Params'];
             $sc_P3D_Params['transactionType'] = $this->config->get($settigs_prefix . 'transaction_type');
-            $sc_P3D_Params['urlDetails']['notificationUrl'] =
-                $sc_P3D_Params['urlDetails']['notificationUrl']['notificationUrl'];
+//            $sc_P3D_Params['urlDetails']['notificationUrl'] =
+//                $sc_P3D_Params['urlDetails']['notificationUrl']['notificationUrl'];
             
             // load help files
             require_once DIR_SYSTEM . 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR . 'SC_REST_API.php';
@@ -889,11 +971,11 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             );
         }
         catch (Exception $ex) {
-            $this->create_log($ex->getMessage(), 'P3D fail Exception: ');
+            SC_LOGGER::create_log($ex->getMessage(), 'P3D fail Exception: ');
             $this->response->redirect($this->url->link('checkout/failure'));
         }
         
-        $this->create_log($p3d_resp, 'D3D / P3D, REST API Call response: ');
+        SC_LOGGER::create_log($p3d_resp, 'D3D / P3D, REST API Call response: ');
 
         if(!$p3d_resp) {
             if($order_info['order_status_id'] == $this->config->get($settigs_prefix . 'pending_status_id')) {
@@ -912,7 +994,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 );
             }
 
-            $this->create_log('Payment 3D API response fails.');
+            SC_LOGGER::create_log('Payment 3D API response fails.');
             $this->response->redirect($this->url->link('checkout/failure'));
         }
 
@@ -1014,7 +1096,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
     {
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
         
-        $this->create_log(
+        SC_LOGGER::create_log(
             'Order ' . $order_id .' has Status: ' . $status,
             'Change_order_status(): '
         );
@@ -1120,7 +1202,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         $this->db->query($q);
                     }
                     catch(Exception $e) {
-                        $this->create_log($e->getMessage(), 'Change order status Exception: ');
+                        SC_LOGGER::create_log($e->getMessage(), 'Change order status Exception: ');
                     }
                     break;
                 }
@@ -1247,10 +1329,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 break;
                 
             default:
-                $this->create_log($status, 'Unexisting status: ');
+                SC_LOGGER::create_log($status, 'Unexisting status: ');
         }
         
-        $this->create_log($order_id . ', ' . $status_id . ', ' . $message, '$order_id, $status_id, $message: ');
+        SC_LOGGER::create_log($order_id . ', ' . $status_id . ', ' . $message, '$order_id, $status_id, $message: ');
         
         $this->model_checkout_order->addOrderHistory($order_id, $status_id, $message, $send_message);
     }
@@ -1266,99 +1348,53 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     private function update_custom_payment_fields($order_id, $data = array(), $overwrite = true)
     {
-        // TODO pass the fields instead to get them. We got them at the plece where
-        // we call this method.
-        $query = $this->db->query(
-            "SELECT `payment_custom_field` FROM `" . DB_PREFIX . "order` "
-            . "WHERE order_id = " . intval($order_id));
-        
-        $payment_custom_fields = $query->row['payment_custom_field'];
-        
-        // get the fields as array
-        if($payment_custom_fields && is_string($payment_custom_fields)) {
-            $payment_custom_fields = json_decode($payment_custom_fields, true);
-        }   
-        
-        if(empty($data)) {
-            $data = array(
-                SC_AUTH_CODE_KEY => isset($_REQUEST['AuthCode']) ? $_REQUEST['AuthCode'] : '',
-                SC_GW_TRANS_ID_KEY => isset($_REQUEST['TransactionID']) ? $_REQUEST['TransactionID'] : '',
-                SC_GW_P3D_RESP_TR_TYPE => isset($_REQUEST['transactionType']) ? $_REQUEST['transactionType'] : '',
-            );
+        try {
+            // TODO pass the fields instead to get them. We got them at the plece where
+            // we call this method.
+            $query = $this->db->query(
+                "SELECT `payment_custom_field` FROM `" . DB_PREFIX . "order` "
+                . "WHERE order_id = " . intval($order_id));
 
-            if(isset($_REQUEST['payment_method']) && $_REQUEST['payment_method']) {
-                $data['_paymentMethod'] = $_REQUEST['payment_method'];
+            $payment_custom_fields = $query->row['payment_custom_field'];
+
+            // get the fields as array
+            if($payment_custom_fields && is_string($payment_custom_fields)) {
+                $payment_custom_fields = json_decode($payment_custom_fields, true);
+            }   
+
+            if(empty($data)) {
+                $data = array(
+                    SC_AUTH_CODE_KEY => isset($_REQUEST['AuthCode']) ? $_REQUEST['AuthCode'] : '',
+                    SC_GW_TRANS_ID_KEY => isset($_REQUEST['TransactionID']) ? $_REQUEST['TransactionID'] : '',
+                    SC_GW_P3D_RESP_TR_TYPE => isset($_REQUEST['transactionType']) ? $_REQUEST['transactionType'] : '',
+                );
+
+                if(isset($_REQUEST['payment_method']) && $_REQUEST['payment_method']) {
+                    $data['_paymentMethod'] = $_REQUEST['payment_method'];
+                }
             }
-        }
-        
-        if($overwrite) {
-            foreach($data as $key => $val) {
-                $payment_custom_fields[$key] = $val;
+
+            if($overwrite) {
+                foreach($data as $key => $val) {
+                    $payment_custom_fields[$key] = $val;
+                }
             }
-        }
-        // append data
-        else {
-            foreach($data as $key => $val) {
-                $payment_custom_fields[$key][] = $val;
+            // append data
+            else {
+                foreach($data as $key => $val) {
+                    $payment_custom_fields[$key][] = $val;
+                }
             }
+
+            // update custom payment fields
+            $this->db->query(
+                "UPDATE `" . DB_PREFIX . "order` SET `payment_custom_field` = '"
+                . json_encode($payment_custom_fields) . "' WHERE `order_id` = " . $order_id
+            );
         }
-        
-        // update custom payment fields
-        $this->db->query(
-            "UPDATE `" . DB_PREFIX . "order` SET `payment_custom_field` = '"
-            . json_encode($payment_custom_fields) . "' WHERE `order_id` = " . $order_id
-        );
+        catch (Exception $e) {
+            SC_LOGGER::create_log($e->getMessage(), 'Exception in update_custom_payment_fields():');
+        }
     }
     
-    /**
-     * Function create_log
-     * Create logs. You MUST have defined SC_LOG_FILE_PATH const,
-     * holding the full path to the log file.
-     * 
-     * @param mixed $data
-     * @param string $title - title of the printed log
-     */
-    private function create_log($data, $title = '')
-    {
-        if(
-            @$this->config->get('create_logs') == 'yes' 
-            || @$this->session->data['create_logs'] == 'yes' 
-            || @$_REQUEST['create_logs'] == 'yes'
-        ) {
-            $d = $data;
-
-            if(is_array($data)) {
-                if(isset($data['cardData']) && is_array($data['cardData'])) {
-                    foreach($data['cardData'] as $k => $v) {
-                        $data['cardData'][$k] = md5($v);
-                    }
-                }
-                if(isset($data['userAccountDetails']) && is_array($data['userAccountDetails'])) {
-                    foreach($data['userAccountDetails'] as $k => $v) {
-                        $data['userAccountDetails'][$k] = md5($v);
-                    }
-                }
-                if(isset($data['paResponse']) && !empty($data['paResponse'])) {
-                    $data['paResponse'] = 'a long string';
-                }
-                if(isset($data['PaRes']) && !empty($data['PaRes'])) {
-                    $data['PaRes'] = 'a long string';
-                }
-            }
-            elseif(is_object($data)) {
-                $d = print_r($data, true);
-            }
-            elseif(is_bool($data)) {
-                $d = $data ? 'true' : 'false';
-            }
-
-            if(!empty($title)) {
-                $d = $title . "\r\n" . $d;
-            }
-
-            // FOR OpenCart ONLY
-            $logger = new Log('SafeCharge-' . date('Y-m-d', time()) . '.log');
-            $logger->write($d . "\n");
-        }
-    }
 }
