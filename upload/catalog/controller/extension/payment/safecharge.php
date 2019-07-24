@@ -1330,12 +1330,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             if(is_array($data)) {
                 if(isset($data['cardData']) && is_array($data['cardData'])) {
                     foreach($data['cardData'] as $k => $v) {
-                        $data['cardData'][$k] = md5($v);
+                        $data['cardData'][$k] = 'some string';
                     }
                 }
                 if(isset($data['userAccountDetails']) && is_array($data['userAccountDetails'])) {
                     foreach($data['userAccountDetails'] as $k => $v) {
-                        $data['userAccountDetails'][$k] = md5($v);
+                        $data['userAccountDetails'][$k] = 'some string';
                     }
                 }
                 if(isset($data['paResponse']) && !empty($data['paResponse'])) {
@@ -1344,6 +1344,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 if(isset($data['PaRes']) && !empty($data['PaRes'])) {
                     $data['PaRes'] = 'a long string';
                 }
+                
+                $d = print_r($data, true);
             }
             elseif(is_object($data)) {
                 $d = print_r($data, true);

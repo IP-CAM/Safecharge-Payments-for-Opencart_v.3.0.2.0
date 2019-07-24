@@ -699,15 +699,21 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $d = $data;
 
             if(is_array($data)) {
-                foreach($data as $k => $dd) {
-                    if(is_array($dd)) {
-                        if(isset($dd['cardData'], $dd['cardData']['CVV'])) {
-                            $data[$k]['cardData']['CVV'] = md5($dd['cardData']['CVV']);
-                        }
-                        if(isset($dd['cardData'], $dd['cardData']['cardHolderName'])) {
-                            $data[$k]['cardData']['cardHolderName'] = md5($dd['cardData']['cardHolderName']);
-                        }
+                if(isset($data['cardData']) && is_array($data['cardData'])) {
+                    foreach($data['cardData'] as $k => $v) {
+                        $data['cardData'][$k] = 'some string';
                     }
+                }
+                if(isset($data['userAccountDetails']) && is_array($data['userAccountDetails'])) {
+                    foreach($data['userAccountDetails'] as $k => $v) {
+                        $data['userAccountDetails'][$k] = 'some string';
+                    }
+                }
+                if(isset($data['paResponse']) && !empty($data['paResponse'])) {
+                    $data['paResponse'] = 'a long string';
+                }
+                if(isset($data['PaRes']) && !empty($data['PaRes'])) {
+                    $data['PaRes'] = 'a long string';
                 }
                 
                 $d = print_r($data, true);
