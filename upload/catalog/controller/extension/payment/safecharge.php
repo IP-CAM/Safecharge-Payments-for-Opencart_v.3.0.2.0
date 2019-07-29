@@ -688,7 +688,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         SC_LOGGER::create_log('process_payment()');
         
         $post = $this->request->post;
-        SC_LOGGER::create_log($post, 'process_payment - $post:');
         
         if(!@$post['payment_method_sc']) {
             SC_LOGGER::create_log('process_payment - payment_method_sc problem');

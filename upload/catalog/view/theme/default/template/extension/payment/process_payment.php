@@ -26,12 +26,19 @@
                         $("#sc_payment_form").submit();
                     });
                 </script>
-            <?php elseif(@$data['redirectURL'] && @$data[''
-                . '']):?>
+            <?php elseif(@$data['redirectURL'] && @$data['pendingURL']): ?>
+                <noscript>
+                    <a href="<?= $data['redirectURL']; ?>">Click here to redirect.</a>
+                </noscript>
+                
                 <script type="text/javascript">
                     window.location.href = "<?= $data['redirectURL']; ?>";
                 </script>
             <?php else: ?>
+                <noscript>
+                    <a href="<?= $data['success_url']; ?>">Click here to continue.</a>
+                </noscript>
+                
                 <script type="text/javascript">
                     window.location.href = "<?= $data['success_url']; ?>";
                 </script>
