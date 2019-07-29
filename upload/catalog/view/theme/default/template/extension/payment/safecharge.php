@@ -27,14 +27,27 @@
         background-color: #FFFFFF;
     }
 
-    #safechargesubmit .apm_title {
+    #safechargesubmit .apm_title  {
         cursor: pointer;
         border-bottom: .1rem solid #939393;
         padding-left: 0.7em;
         padding-bottom: 0.5em;
         position: relative;
     }
-
+    
+    #sc_card_number, #sc_card_expiry {
+        border-bottom: .1rem solid #939393;
+        padding-left: 0;
+        padding-bottom: 0.5em;
+        line-height: inherit;
+    }
+    
+    #sc_card_number, #sc_card_expiry, #sc_card_cvc
+    {
+        line-height: inherit;
+        margin-top: 3px;
+    }
+    
     #safechargesubmit .apm_title .fa-check {
         cursor: pointer;
         color: #55a985;
@@ -59,7 +72,7 @@
         border-bottom: .1rem solid #9B9B9B;
     }
 
-    #safechargesubmit .apm_field {
+    #safechargesubmit .apm_field  {
         padding-left: 0.7em;
         padding-right: 0.7em;
         padding-top: 1em;
@@ -109,7 +122,7 @@
     }
 
     /* fixes for last field borders */
-    #safechargesubmit .apm_fields .apm_field:last-child input  {
+    #safechargesubmit .apm_fields .apm_field:last-child input, #sc_card_cvc  {
         border: 0 !important;
     }
 
@@ -123,42 +136,10 @@
     .SfcField iframe {
         min-height: 20px !important;
         color: inherit !important;
-    }
-    
-    .SfcField iframe:focus {
-        border: 0 !important;
-        outline: 0 !important;
-        background-color: inherit !important;
-        border-radius: 0px !important;
-        padding-bottom: 8px !important;
-        padding-left: 0px !important;
-        padding-right: 0px !important;
-        width: 100%;
-        box-shadow: none !important;
+        
     }
     /* fixes for last field borders END */
 </style>
-
-<script type="text/javascript">
-    paymentAPI = "<?= @$data['payment_api']; ?>";
-    payloadURL = "<?= @$data['payload_url']; ?>";
-    
-    var scLocale = "<?= $data['scLocale'] ?>";
-    var scData = {
-        merchantSiteId: <?= $data['merchantSiteId']; ?>
-        ,sessionToken: "<?= $data['sessionToken'] ?>"
-    };
-    
-    <?php if(@$data['sc_test_env'] == 'yes'): ?>
-        scData.env = 'test';
-    <?php endif; ?>
-    
-    var scTestEnv           = "<?= @$data['sc_test_env']; ?>";
-    var scBtnConfirmText    = "<?= @$data['button_confirm']; ?>";
-    var scBtnLoadingText    = "<?= @$data['sc_btn_loading']; ?>";
-    var scTokenError        = "<?= @$data['sc_token_error']; ?>";
-    var scTokenError2       = "<?= @$data['sc_token_error_2']; ?>";
-</script>
 
 <form action="<?= $data['action']; ?>" method="POST" name="safechargesubmit" id="safechargesubmit">
     <?php foreach($data['html_inputs'] as $name => $value): ?>
@@ -222,9 +203,22 @@
                     
                     <?php if(in_array($payment_method['paymentMethod'], array('cc_card', 'dc_card', 'paydotcom'))): ?>
                         <div class="apm_fields" id="sc_<?= $payment_method['paymentMethod']; ?>">
-                            <div id="sc_card_number" class="apm_field"></div>
-                            <div id="sc_card_expiry" class="apm_field"></div>
-                            <div id="sc_card_cvc" class="apm_field"></div>
+                            <div class="apm_field">
+                                <div id="sc_card_number"></div>
+                            </div>
+                            
+                            <div class="apm_field">
+                                <input type="text" name="<?= $payment_method['paymentMethod']; ?>[cardHolderName]" placeholder="Card holder name" />
+                            </div>
+                            
+                            <div class="apm_field">
+                                <div id="sc_card_expiry"></div>
+                            </div>
+                            
+                            <div class="apm_field">
+                                <div id="sc_card_cvc"></div>
+                            </div>
+                            
                             <input type="hidden" id="<?= $payment_method['paymentMethod']; ?>_ccTempToken" name="<?= $payment_method['paymentMethod']; ?>[ccTempToken]" />
                         </div>
                     <?php elseif(count($payment_method['fields']) > 0): ?>
@@ -234,8 +228,8 @@
                                     <input id="<?= $payment_method['paymentMethod']; ?>_<?= $p_field['name']; ?>" name="<?= $payment_method['paymentMethod']; ?>[<?= $p_field['name']; ?>]" type="<?= $p_field['type']; ?>" <?php if(isset($p_field['regex']) && !empty($p_field['regex'])): ?>pattern="<?= $p_field['regex'] ?>"<?php endif; ?> placeholder="<?= @$p_field['caption'][0]['message']; ?>" />
 
                                     <?php if(isset($p_field['regex']) && !empty($p_field['regex'])): ?>
-                                        <i class="fa fa-question-circle-o" onclick="showErrorLikeInfo(<?= 'sc_' . $p_field['name']; ?>)" aria-hidden="true"></i>
-                                        <div class="apm_error" id="error_sc_<?= $p_field['name']; ?>">
+                                        <i class="fa fa-question-circle-o" onclick="showErrorLikeInfo('sc_<?= $p_field['name']; ?>')" aria-hidden="true"></i>
+                                        <div class="apm_error hide" id="error_sc_<?= $p_field['name']; ?>">
                                             <label><?= $p_field['validationmessage'][0]['message']; ?></label>
                                         </div>
                                     <?php endif; ?>
@@ -262,5 +256,32 @@
         </div>
     </div>
 </form>
+
+<script type="text/javascript">
+    paymentAPI = "<?= @$data['payment_api']; ?>";
+    payloadURL = "<?= @$data['payload_url']; ?>";
+    
+    var scLocale = "<?= $data['scLocale'] ?>";
+    var scData = {
+        merchantSiteId: <?= $data['merchantSiteId']; ?>
+        ,sessionToken: "<?= $data['sessionToken'] ?>"
+    };
+    
+    <?php if(@$data['sc_test_env'] == 'yes'): ?>
+        scData.env = 'test';
+    <?php endif; ?>
+    
+    var scTestEnv           = "<?= @$data['sc_test_env']; ?>";
+    var scBtnConfirmText    = "<?= @$data['button_confirm']; ?>";
+    var scBtnLoadingText    = "<?= @$data['sc_btn_loading']; ?>";
+    var scTokenError        = "<?= @$data['sc_token_error']; ?>";
+    var scTokenError2       = "<?= @$data['sc_token_error_2']; ?>";
+    
+    // for the fields
+    var sfc                 = null;
+    var sfcFirstField       = null;
+    
+    
+</script>
 
 <script type="text/javascript" src="catalog/view/javascript/sc.js"></script>

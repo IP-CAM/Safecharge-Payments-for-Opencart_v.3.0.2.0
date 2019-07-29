@@ -168,11 +168,16 @@ class SC_REST_API
      * 
      * @return mixed
      */
-    public static function call_rest_api($url, $checksum_params, $checksum, $other_params = array())
+    public static function call_rest_api($url, $checksum_params, $checksum = '', $other_params = array())
     {
         $resp = false;
         
-        $checksum_params['checksum'] = $checksum;
+        if(
+            (!isset($checksum_params['checksum']) || empty($checksum_params['checksum']))
+            && !empty($checksum)
+        ) {
+            $checksum_params['checksum'] = $checksum;
+        }
         
         if(!empty($other_params) and is_array($other_params)) {
             $params = array_merge($checksum_params, $other_params);
@@ -370,153 +375,6 @@ class SC_REST_API
     }
     
     /**
-     * Function process_payment
-     * Here are the different payment methods
-     * 
-     * @param array $data - contains the checksum
-     * @param array $sc_variables
-     * @param string $order_id
-     * @param string $payment_method - apm|d3d
-     * 
-     * @return array|bool
-     */
-    public static function process_payment($data, $sc_variables, $order_id, $payment_method)
-    {
-        $resp = false;
-        
-        $data = array_merge($data, $sc_variables);
-        
-        try {
-            // common parameters for the methods
-            $params = array(
-                'merchantId'        => $data['merchantId'],
-                'merchantSiteId'    => $data['merchantSiteId'],
-                'userTokenId'       => $data['email'], // the email of the logged user or user who did the payment
-                'clientUniqueId'    => $order_id,
-                'clientRequestId'   => $data['client_request_id'],
-                'currency'          => $data['currency'],
-                'amount'            => (string) $data['total_amount'],
-                'amountDetails'     => array(
-                    'totalShipping'     => '0.00',
-                    'totalHandling'     => $data['handling'], // this is actually shipping
-                    'totalDiscount'     => @$data['discount'] ? $data['discount'] : '0.00',
-                    'totalTax'          => @$data['total_tax'] ? $data['total_tax'] : '0.00',
-                ),
-                'items'             => $data['items'],
-                'userDetails'       => array(
-                    'firstName'         => $data['first_name'],
-                    'lastName'          => $data['last_name'],
-                    'address'           => $data['address1'],
-                    'phone'             => $data['phone1'],
-                    'zip'               => $data['zip'],
-                    'city'              => $data['city'],
-                    'country'           => $data['country'],
-                    'state'             => '',
-                    'email'             => $data['email'],
-                    'county'            => '',
-                ),
-                'shippingAddress'   => array(
-                    'firstName'         => $data['shippingFirstName'],
-                    'lastName'          => $data['shippingLastName'],
-                    'address'           => $data['shippingAddress'],
-                    'cell'              => '',
-                    'phone'             => '',
-                    'zip'               => $data['shippingZip'],
-                    'city'              => $data['shippingCity'],
-                    'country'           => $data['shippingCountry'],
-                    'state'             => '',
-                    'email'             => '',
-                    'shippingCounty'    => $data['shippingCountry'],
-                ),
-                'billingAddress'   => array(
-                    'firstName'         => $data['first_name'],
-                    'lastName'          => $data['last_name'],
-                    'address'           => $data['address1'],
-                    'cell'              => '',
-                    'phone'             => $data['phone1'],
-                    'zip'               => $data['zip'],
-                    'city'              => $data['city'],
-                    'country'           => $data['country'],
-                    'state'             => $data['state'],
-                    'email'             => $data['email'],
-                    'county'            => '',
-                ),
-                'urlDetails'        => $data['urlDetails'],
-                'timeStamp'         => $data['time_stamp'],
-                'checksum'          => $data['checksum'],
-                'webMasterID'       => @$data['webMasterId'],
-                'deviceDetails'     => self::get_device_details(),
-            );
-
-            // get Session Token
-            $params['sessionToken'] = @$data['lst'];
-                    
-            if(!$params['sessionToken']) {
-                $session_token_data = self::get_session_token($data);
-                if(!@$session_token_data['sessionToken']) {
-                    SC_LOGGER::create_log(@$data['lst'], 'Missing Last Session Token: ');
-                    return false;
-                }
-
-                $params['sessionToken'] = @$session_token_data['sessionToken'];
-            }
-            
-            // set parameters specific for the payment method
-            switch ($payment_method) {
-                case 'apm':
-                    $params['paymentMethod'] = $data['APM_data']['payment_method'];
-                    
-                    // append payment method credentionals
-                    if(isset($data['APM_data']['apm_fields'])) {
-                        $params['userAccountDetails'] = $data['APM_data']['apm_fields'];
-                    }
-                    
-                    $endpoint_url = $data['test'] == 'no' ? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
-                    break;
-
-                case 'd3d': // APMs and UPOs
-                    $params['isDynamic3D'] = 1;
-                    
-                    // for APMs we use Fields and get only ccTempToken
-                    if(isset($data['APM_data']['apm_fields']['ccTempToken'])) {
-                        $params['cardData']['ccTempToken'] = $data['APM_data']['apm_fields']['ccTempToken'];
-                    }
-                    // for UPOs we get UPO ID and CVV
-                    elseif(isset($data['userPaymentOption'])) {
-                        $params['userPaymentOption'] = $data['userPaymentOption'];
-                    }
-                    
-                    $endpoint_url = $data['test'] == 'no' ? SC_LIVE_D3D_URL : SC_TEST_D3D_URL;
-                    break;
-                    
-                // if we can't set $endpoint_url stop here
-                default:
-                    SC_LOGGER::create_log($payment_method, 'Not supported payment method: ');
-                    return false;
-            }
-
-            $resp = self::call_rest_api(
-                $endpoint_url,
-                $params,
-                $data['checksum']
-            );
-            
-            SC_LOGGER::create_log($resp, 'REST API Response when Process Payment: ');
-        }
-        catch(Exception $e) {
-            SC_LOGGER::create_log($e->getMessage(), 'Process Payment Exception ERROR: ');
-            return false;
-        }
-        
-        if(!$resp || !is_array($resp)) {
-            SC_LOGGER::create_log($resp, 'Process Payment response: ');
-            return false;
-        }
-        
-        return $resp;
-    }
-    
-    /**
      * Function get_session_token
      * Get session tokens for different actions with the REST API.
      * We can call this method with Ajax when need tokenization.
@@ -598,7 +456,7 @@ class SC_REST_API
      * 
      * @return array $device_details
      */
-    private static function get_device_details()
+    public static function get_device_details()
     {
         $device_details = array(
             'deviceType'    => 'UNKNOWN', // DESKTOP, SMARTPHONE, TABLET, TV, and UNKNOWN

@@ -687,6 +687,17 @@ class ControllerExtensionPaymentSafeCharge extends Controller
     {
         SC_LOGGER::create_log('process_payment()');
         
+        $post = $this->request->post;
+        SC_LOGGER::create_log($post, 'process_payment - $post:');
+        
+        if(!@$post['payment_method_sc']) {
+            SC_LOGGER::create_log('process_payment - payment_method_sc problem');
+            
+            $this->response->redirect(@$post['error_url']);
+        }
+        
+        require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR. 'SC_REST_API.php';
+        
         $ctr_file_path  = SafeChargeVersionResolver::get_ctr_file_path();
         $ctr_url_path   = SafeChargeVersionResolver::get_public_ctr_file_path();
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
@@ -698,86 +709,145 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         // map here variables
         try {
-            $params = $this->request->post;
+            $test_mode  = $this->config->get($settigs_prefix . 'test_mode');
+            $secret     = $this->config->get($settigs_prefix . 'secret');
+            $hash       = $this->config->get($settigs_prefix . 'hash_type');
             
-            $params['urlDetails'] = array(
-                'successUrl'        => $params['success_url'],
-                'failureUrl'        => $params['error_url'],
-                'pendingUrl'        => $params['pending_url'],
-                'notificationUrl'   => $params['notify_url'],
+            $params = array(
+                'merchantId'        => $post['merchant_id'],
+                'merchantSiteId'    => $post['merchant_site_id'],
+                'userTokenId'       => $post['user_token_id'],
+                'clientUniqueId'    => $this->session->data['order_id'],
+                'clientRequestId'   => $post['client_request_id'],
+                'currency'          => $post['currency'],
+                'amount'            => (string) $post['total_amount'],
+                'amountDetails'     => array(
+                    'totalShipping'     => '0.00',
+                    'totalHandling'     => '0.00',
+                    'totalDiscount'     => '0.00',
+                    'totalTax'          => '0.00',
+                ),
+                'items'             => $post['items'],
+                'userDetails'       => array(
+                    'firstName'         => $post['first_name'],
+                    'lastName'          => $post['last_name'],
+                    'address'           => $post['address1'],
+                    'phone'             => $post['phone1'],
+                    'zip'               => $post['zip'],
+                    'city'              => $post['city'],
+                    'country'           => $post['country'],
+                    'state'             => '',
+                    'email'             => $post['email'],
+                    'county'            => '',
+                ),
+                'shippingAddress'   => array(
+                    'firstName'         => $post['shippingFirstName'],
+                    'lastName'          => $post['shippingLastName'],
+                    'address'           => $post['shippingAddress'],
+                    'cell'              => '',
+                    'phone'             => '',
+                    'zip'               => $post['shippingZip'],
+                    'city'              => $post['shippingCity'],
+                    'country'           => $post['shippingCountry'],
+                    'state'             => '',
+                    'email'             => '',
+                    'shippingCounty'    => $post['shippingCountry'],
+                ),
+                'billingAddress'   => array(
+                    'firstName'         => $post['first_name'],
+                    'lastName'          => $post['last_name'],
+                    'address'           => $post['address1'],
+                    'cell'              => '',
+                    'phone'             => $post['phone1'],
+                    'zip'               => $post['zip'],
+                    'city'              => $post['city'],
+                    'country'           => $post['country'],
+                    'state'             => $post['state'],
+                    'email'             => $post['email'],
+                    'county'            => '',
+                ),
+                'urlDetails'        => array(
+                    'successUrl'        => $post['success_url'],
+                    'failureUrl'        => $post['error_url'],
+                    'pendingUrl'        => $post['pending_url'],
+                    'notificationUrl'   => $post['notify_url'],
+                ),
+                'timeStamp'         => $TimeStamp,
+                'webMasterID'       => @$post['webMasterId'],
+                'sessionToken'      => @$post['lst'],
+                'deviceDetails'     => SC_REST_API::get_device_details(),
             );
-
-            require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR. 'SC_REST_API.php';
             
-            $sc_settings = @$this->session->data['SC_Settings'];
-            unset($this->session->data['SC_Settings']);
+            $params['checksum'] = hash(
+                $hash,
+                $params['merchantId'] . $params['merchantSiteId'] . $params['clientRequestId']
+                    . $params['amount'] . $params['currency'] . $TimeStamp . $secret
+            );
             
-            // lst parameter is passed from the form. It is the session token used for
-            // card tokenization. We MUST use the same token for D3D Payment
-            if(isset($params['lst']) && !empty($params['lst'])) {
-                $sc_settings['lst'] = $params['lst'];
-            }
-
-            $payment_method = 'apm'; // set the payment method type
-            
-            // user selected UPO - we get the ID
-            if(is_numeric($params['payment_method_sc'])) {
-                $payment_method = 'd3d';
-
-                $sc_settings['userPaymentOption'] = array(
-                    'userPaymentOptionId'   => $params['payment_method_sc'],
-                    'CVV'                   => $params['upo_cvv_field_' . $params['payment_method_sc']],
+            // in case of UPO
+            if(is_numeric(@$post['payment_method_sc'])) {
+                $params['userPaymentOption'] = array(
+                    'userPaymentOptionId' => $post['payment_method_sc'],
+                    'CVV' => $post['upo_cvv_field_' . $post['payment_method_sc']],
                 );
+                
+                $params['isDynamic3D'] = 1;
+                $endpoint_url = $test_mode == 'no' ? SC_LIVE_D3D_URL : SC_TEST_D3D_URL;
             }
-            // user selected APM - we get the name
-            elseif(in_array($params['payment_method_sc'], array('cc_card' ,'dc_card'))) {
-                $payment_method = 'd3d';
+            // in case of Card
+            elseif(in_array(@$post['payment_method_sc'], array('cc_card', 'dc_card'))) {
+                if(isset($post[$post['payment_method_sc']]['ccTempToken'])) {
+                    $params['cardData']['ccTempToken'] = $post[$post['payment_method_sc']]['ccTempToken'];
+                }
                 
-                // mark the Order as not APM paid
-                $params['urlDetails']['notificationUrl'] .= '&is-apm=0';
+                if(isset($post[$post['payment_method_sc']]['CVV'])) {
+                    $params['cardData']['CVV'] = $post[$post['payment_method_sc']]['CVV'];
+                }
                 
-                $sc_settings['APM_data']['payment_method'] = $params['payment_method_sc'];
-                $sc_settings['APM_data']['apm_fields']['ccTempToken'] =
-                    $params[$params['payment_method_sc']]['ccTempToken'];
+                if(isset($post[$post['payment_method_sc']]['cardHolderName'])) {
+                    $params['cardData']['cardHolderName'] = $post[$post['payment_method_sc']]['cardHolderName'];
+                }
+
+                $params['isDynamic3D'] = 1;
+                $endpoint_url = $test_mode == 'no' ? SC_LIVE_D3D_URL : SC_TEST_D3D_URL;
             }
-            // if payment method has other fields add them
-            elseif(
-                isset($params[$params['payment_method_sc']])
-                && is_array($params[$params['payment_method_sc']])
-            ) {
-                $sc_settings['APM_data']['payment_method'] = $params['payment_method_sc'];
+            // in case of APM
+            elseif(@$post['payment_method_sc']) {
+                $endpoint_url = $test_mode == 'no' ? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
+                $params['paymentMethod'] = $post['payment_method_sc'];
                 
-                foreach($params[$params['payment_method_sc']] as $field => $val) {
-                    $sc_settings['APM_data']['apm_fields'][$field] = $val;
+                if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
+                    $params['userAccountDetails'] = $_POST[$_POST['payment_method_sc']];
+                    
                 }
             }
             
-            unset($params['route']);
+            $resp = SC_REST_API::call_rest_api($endpoint_url, $params);
             
-            SC_LOGGER::create_log($payment_method, 'payment_method: ');
-            
-            $resp = SC_REST_API::process_payment(
-                $params
-                ,$sc_settings
-                ,$this->session->data['order_id']
-                ,$payment_method
-            );
+            SC_LOGGER::create_log($resp, 'process_payment response:');
             
             if(!$resp || $this->get_request_status($resp) == 'ERROR') {
-                $this->response->redirect($params['error_url']);
+                $this->response->redirect($post['error_url']);
             }
             
-            if(
-                $this->get_request_status($resp) == 'ERROR'
-                || @$resp['transactionStatus'] == 'ERROR'
-            ) {
+            if($this->get_request_status($resp) == 'ERROR' || @$resp['transactionStatus'] == 'ERROR') {
                 $this->change_order_status(
                     intval($this->session->data['order_id']), 
                     'ERROR', 
                     @$resp['transactionType']
                 );
                 
-                $this->response->redirect($params['error_url']);
+                $this->response->redirect($post['error_url']);
+            }
+            
+            if(@$resp['transactionStatus'] == 'DECLINED') {
+                $this->change_order_status(
+                    intval($this->session->data['order_id']), 
+                    'DECLINED', 
+                    @$resp['transactionType']
+                );
+                
+                $this->response->redirect($post['error_url']);
             }
             
             if($this->get_request_status($resp) == 'SUCCESS') {
@@ -792,65 +862,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 }
                 
                 // prepare the new session data
-                if($payment_method == 'd3d') {
-                    $params_p3d = array(
-                        'sessionToken'      => $resp['sessionToken'],
-                        'orderId'           => $resp['orderId'],
-                        'merchantId'        => $resp['merchantId'],
-                        'merchantSiteId'    => $resp['merchantSiteId'],
-                        'userTokenId'       => $resp['userTokenId'],
-                        'clientUniqueId'    => $resp['clientUniqueId'],
-                        'clientRequestId'   => $resp['clientRequestId'],
-                        'transactionType'   => $resp['transactionType'],
-                        'currency'          => $params['currency'],
-                        'amount'            => $params['total_amount'],
-                        'amountDetails'     => array(
-                            'totalShipping'     => '0.00',
-                            'totalHandling'     => $params['handling'],
-                            'totalDiscount'     => @$params['discount'] ? $params['discount'] : '0.00',
-                            'totalTax'          => @$params['total_tax'] ? $params['total_tax'] : '0.00',
-                        ),
-                        'items'             => $params['items'],
-                        'deviceDetails'     => array(), // get them in SC_REST_API Class
-                        'shippingAddress'   => array(
-                            'firstName'         => $params['shippingFirstName'],
-                            'lastName'          => $params['shippingLastName'],
-                            'address'           => $params['shippingAddress'],
-                            'phone'             => '',
-                            'zip'               => $params['shippingZip'],
-                            'city'              => $params['shippingCity'],
-                            'country'           => $params['shippingCountry'],
-                            'state'             => '',
-                            'email'             => '',
-                            'shippingCounty'    => '',
-                        ),
-                        'billingAddress'    => array(
-                            'firstName'         => $params['first_name'],
-                            'lastName'          => $params['last_name'],
-                            'address'           => $params['address1'],
-                            'phone'             => $params['phone1'],
-                            'zip'               => $params['zip'],
-                            'city'              => $params['city'],
-                            'country'           => $params['country'],
-                            'state'             => '',
-                            'email'             => $params['email'],
-                            'county'            => '',
-                        ),
-                        'paResponse'        => '',
-                    //    'urlDetails'        => $params['urlDetails'],
-                        'timeStamp'         => $params['time_stamp'],
-                        'checksum'          => $params['checksum'],
-                        'webMasterId'       => $params['webMasterId'],
-                    );
+                if(isset($params['userPaymentOption']) || isset($params['cardData'])) {
+                    $params_p3d = $params;
                     
-                    $params_p3d['urlDetails']['notificationUrl'] = $params['urlDetails']['notificationUrl'];
-                    
-                    if(isset($sc_settings['APM_data']['apm_fields']['ccTempToken'])) {
-                        $params_p3d['cardData']['ccTempToken'] = $sc_settings['APM_data']['apm_fields']['ccTempToken'];
-                    }
-                    elseif(isset($sc_settings['userPaymentOption'])) {
-                        $params_p3d['userPaymentOption'] = $sc_settings['userPaymentOption'];
-                    }
+                    $params_p3d['orderId']          = $resp['orderId'];
+                    $params_p3d['transactionType']  = @$resp['transactionType'];
+                    $params_p3d['paResponse']       = '';
                     
                     $this->session->data['SC_P3D_Params'] = $params_p3d;
                     
@@ -867,7 +884,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         $data['acsUrl']     = $resp['acsUrl'];
                         $data['paRequest']  = $resp['paRequest'];
                         // it is also pending page
-                        $data['TermUrl']    = $params['success_url'] . '&create_logs=' . @$_REQUEST['create_logs'];
+                        $data['TermUrl']    = $post['success_url'] . '&create_logs=' . @$_REQUEST['create_logs'];
                         
                         SC_LOGGER::create_log($data, 'params for acsUrl: ');
                         
@@ -884,7 +901,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 // in case we have redirectURL
                 elseif(isset($resp['redirectURL']) && !empty($resp['redirectURL'])) {
                     $data['redirectURL'] = $resp['redirectURL'];
-                    $data['pendingURL'] = $params['success_url'];
+                    $data['pendingURL'] = $post['success_url'];
                 }
             }
             
@@ -916,7 +933,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $data['header']         = $this->load->controller('common/header');
             $data['footer']         = $this->load->controller('common/footer');
             $data['column_left']    = $this->load->controller('common/column_left');
-            $data['success_url']    = $params['success_url'];
+            $data['success_url']    = $post['success_url'];
 
             // load common php template and then pass it to the real template
             // as single variable. The form is same for both versions
@@ -933,7 +950,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         }
         catch (Exception $ex) {
             SC_LOGGER::create_log($ex->getMessage(), 'process_payment Exception: ');
-            $this->response->redirect($params['error_url']);
+            $this->response->redirect($post['error_url']);
         }
     }
     

@@ -2,9 +2,6 @@ var billingCountryName  = '';
 var paymentAPI          = '';
 var tokAPMs             = ['cc_card', 'dc_card', 'paydotcom'];
 var selectedPM          = '';
-// for the fields
-var sfc                 = null;
-var sfcFirstField       = null;
 
 /**
  * Function createSCFields
@@ -20,24 +17,36 @@ function createSCFields() {
 
     // set some classes
     var elementClasses = {
-        focus: 'focus',
-        empty: 'empty',
-        invalid: 'invalid',
+        focus: 'focus'
+        ,empty: 'empty'
+        ,invalid: 'invalid'
+        
     };
+    
+    var elementStyles = {
+        base: {
+            fontSize: $('#sc_card_holder_name').css('font-size')
+            ,color: $('#sc_card_holder_name').css('color')
+            ,borderBottom: '.1rem solid #9B9B9B !important'
+        }
+    }
 
     // describe fields
     var cardNumber = sfcFirstField = fields.create('ccNumber', {
         classes: elementClasses
+        ,style: elementStyles
     });
     cardNumber.attach('#sc_card_number');
 
     var cardExpiry = fields.create('ccExpiration', {
         classes: elementClasses
+        ,style: elementStyles
     });
     cardExpiry.attach('#sc_card_expiry');
 
     var cardCvc = fields.create('ccCvc', {
         classes: elementClasses
+        ,style: elementStyles
     });
     cardCvc.attach('#sc_card_cvc');
 }
