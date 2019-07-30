@@ -91,17 +91,6 @@
         width: 100%;
     }
 
-    /* Chrome, Firefox, Opera, Safari 10.1+ */
-    #sc_apms_list .apm_field input::placeholder, #sc_upos_list .apm_field input::placeholder,
-    /* Internet Explorer 10-11 */
-    #sc_apms_list .apm_field input:-ms-input-placeholder, #sc_upos_list .apm_field input:-ms-input-placeholder,
-    /* Microsoft Edge */
-    #sc_apms_list .apm_field input::-ms-input-placeholder, #sc_upos_list .apm_field input::-ms-input-placeholder,
-    .SfcField iframe::placeholder
-    {
-        opacity: 0.6; /* Firefox */
-    }
-
     #safechargesubmit .apm_error {
         background: none;
         width: 100%;
@@ -135,8 +124,6 @@
     
     .SfcField iframe {
         min-height: 20px !important;
-        color: inherit !important;
-        
     }
     /* fixes for last field borders END */
 </style>
@@ -208,7 +195,7 @@
                             </div>
                             
                             <div class="apm_field">
-                                <input type="text" name="<?= $payment_method['paymentMethod']; ?>[cardHolderName]" placeholder="Card holder name" />
+                                <input type="text" id="sc_card_holder_name" name="<?= $payment_method['paymentMethod']; ?>[cardHolderName]" placeholder="Card holder name" />
                             </div>
                             
                             <div class="apm_field">

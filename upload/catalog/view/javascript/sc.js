@@ -25,9 +25,11 @@ function createSCFields() {
     
     var elementStyles = {
         base: {
-            fontSize: $('#sc_card_holder_name').css('font-size')
-            ,color: $('#sc_card_holder_name').css('color')
-            ,borderBottom: '.1rem solid #9B9B9B !important'
+            fontSize: 12
+            ,color: '#666'
+            ,'::placeholder': {
+                color: 'grey'
+            }
         }
     }
 
