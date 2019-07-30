@@ -756,7 +756,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                     'country'           => $post['shippingCountry'],
                     'state'             => '',
                     'email'             => '',
-                    'shippingCounty'    => $post['shippingCountry'],
+                    'shippingCounty'    => '',
                 ),
                 'billingAddress'   => array(
                     'firstName'         => $post['first_name'],
