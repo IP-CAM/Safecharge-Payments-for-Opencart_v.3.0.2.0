@@ -135,7 +135,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $params['items[0][quantity]']  = 1;
             
             # get UPOs
-            $data['upos'] = array();
+            $upos = array();
             
             if((bool)$this->customer->isLogged()) {
                 $time = date('YmdHis', time());
@@ -161,7 +161,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                             $upo_data['upoStatus'] == 'enabled'
                             && strtotime(@$upo_data['expiryDate']) > strtotime(date('Ymd'))
                         ) {
-                            $data['upos'][] = $upo_data;
+                            $upos[] = $upo_data;
                         }
                     }
                 }
@@ -209,12 +209,18 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             # get APMs END
             
             // add icons for the upos
-            $data['icons'] = array();
+            $data['icons']  = array();
+            $data['upos']   = array();
 
-            if($data['upos'] && $data['payment_methods']) {
-                foreach($data['upos'] as $upo_key => $upo) {
-                    if(!@$upo['upoData']['uniqueCC']) {
-                        unset($data['upos'][$upo_key]);
+            if($upos && $data['payment_methods']) {
+                foreach($upos as $upo_key => $upo) {
+                    if(
+                        @$upo['upoStatus'] != 'enabled'
+                        || (isset($upo['upoData']['ccCardNumber'])
+                            && empty($upo['upoData']['ccCardNumber']))
+                        || (isset($upo['expiryDate'])
+                            && strtotime($upo['expiryDate']) < strtotime(date('Ymd')))
+                    ) {
                         continue;
                     }
 
@@ -230,13 +236,13 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                                     $upo['upoData']['brand'],
                                     $pm['logoURL']
                                 );
-
-                                break;
                             }
                             else {
                                 $data['icons'][$pm['paymentMethod']] = $pm['logoURL'];
-                                break;
                             }
+                            
+                            $data['upos'][] = $upo;
+                            break;
                         }
                     }
                 }
