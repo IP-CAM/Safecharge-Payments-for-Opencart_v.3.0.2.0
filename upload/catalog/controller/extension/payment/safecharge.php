@@ -445,17 +445,16 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		$data['sc_test_env']        = $settings['test'];
         
         // texts
-		$data['sc_attention']       = $this->language->get('Attention!');
-		$data['sc_go_to_step_2_error'] =
-            $this->language->get('You must confirm all steps starting from Step 2, to get correct APMs!');
-		$data['button_confirm']     = $this->language->get('button_confirm');
-		$data['sc_btn_loading']     = $this->language->get('Loading...');
-        $data['sc_upos_title']      = $this->language->get('Choose from you prefered payment methods');
-        $data['sc_pms_title']       = $this->language->get('Choose from the other payment methods');
-        $data['choose_pm_error']    = $this->language->get('Please, choose payment method and fill all its fields!');
-        $data['rest_no_apms_error'] = $this->language->get('rest_no_apms_error');
-        $data['sc_token_error']     = $this->language->get('Error in Tokenization process.');
-        $data['sc_token_error_2']   = $this->language->get('Error when try to proceed the payment. Please, check you fields!');
+		$data['sc_attention']           = $this->language->get('sc_attention');
+		$data['sc_go_to_step_2_error']  = $this->language->get('sc_go_to_step_2_error');
+		$data['button_confirm']         = $this->language->get('button_confirm');
+		$data['sc_btn_loading']         = $this->language->get('Loading...');
+        $data['sc_upos_title']          = $this->language->get('sc_upos_title');
+        $data['sc_pms_title']           = $this->language->get('sc_pms_title');
+        $data['choose_pm_error']        = $this->language->get('choose_pm_error');
+        $data['rest_no_apms_error']     = $this->language->get('rest_no_apms_error');
+        $data['sc_token_error']         = $this->language->get('sc_token_error');
+        $data['sc_token_error_2']       = $this->language->get('sc_token_error_2');
         
         // load common php template and then pass it to the real template
         // as single variable. The form is same for both versions
@@ -823,7 +822,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 
                 if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
                     $params['userAccountDetails'] = $_POST[$_POST['payment_method_sc']];
-                    
                 }
             }
             
