@@ -66,15 +66,14 @@ class SC_LOGGER
             // same for all plugins
 
             // path is different fore each plugin
-            $logs_dir = DIR_STORAGE . 'logs' . DIRECTORY_SEPARATOR;
-            if(!is_dir($logs_dir)) {
+            if(!defined(DIR_LOGS) || !is_dir($logs_dir)) {
                 echo 'logs dir is not dir.';
                 return;
             }
             
             try {
                 file_put_contents(
-                    $logs_dir . 'SafeCharge-' . date('Y-m-d', time()) . '.txt',
+                    DIR_LOGS . 'SafeCharge-' . date('Y-m-d', time()) . '.txt',
                     date('H:i:s', time()) . ': ' . $d . "\r\n", FILE_APPEND
                 );
             }

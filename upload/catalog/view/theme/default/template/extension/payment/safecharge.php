@@ -250,7 +250,7 @@
     
     var scLocale = "<?= $data['scLocale'] ?>";
     var scData = {
-        merchantSiteId: <?= $data['merchantSiteId']; ?>
+        merchantSiteId: "<?= $data['merchantSiteId']; ?>"
         ,sessionToken: "<?= $data['sessionToken'] ?>"
     };
     
