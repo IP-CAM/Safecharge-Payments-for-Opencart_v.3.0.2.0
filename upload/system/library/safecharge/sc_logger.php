@@ -66,8 +66,7 @@ class SC_LOGGER
             // same for all plugins
 
             // path is different fore each plugin
-            if(!defined(DIR_LOGS) || !is_dir($logs_dir)) {
-                echo 'logs dir is not dir.';
+            if(!defined('DIR_LOGS') || !is_dir(DIR_LOGS)) {
                 return;
             }
             
