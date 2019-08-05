@@ -134,6 +134,45 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $params['items[0][price]']     = $params['total_amount'];
             $params['items[0][quantity]']  = 1;
             
+            # get APMs
+            // client request id 1
+            $time = date('YmdHis', time());
+            $settings['cri1'] = $time. '_' .uniqid();
+
+            // checksum 1 - checksum for session token
+            $settings['cs1'] = hash(
+                $settings['hash_type'],
+                $settings['merchant_id'] . $settings['merchantsite_id']
+                    . $settings['cri1'] . $time . $settings['secret_key']
+            );
+
+            // client request id 2
+            $time = date('YmdHis', time());
+            $settings['cri2'] = $time. '_' .uniqid();
+
+            // checksum 2 - checksum for get apms
+            $time = date('YmdHis', time());
+            $settings['cs2'] = hash(
+                $settings['hash_type'],
+                $settings['merchant_id'] . $settings['merchantsite_id']
+                    . $settings['cri2'] . $time . $settings['secret_key']
+            );
+            
+            $res = SC_REST_API::get_rest_apms($settings);
+            
+            if(!is_array($res) || !isset($res['paymentMethods']) || empty($res['paymentMethods'])) {
+                SC_LOGGER::create_log($res, 'Get APMs problem with the response: ');
+                
+                echo
+                    '<script type="text/javascript">alert("'
+                        . $this->language->get('pm_error') . '")</script>';
+                exit;
+            }
+            
+            // set template data with the payment methods
+            $data['payment_methods'] = $res['paymentMethods'];
+            # get APMs END
+            
             # get UPOs
             $upos = array();
             
@@ -167,52 +206,11 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 }
             }
             
-            # get APMs
-            // client request id 1
-            $time = date('YmdHis', time());
-            $settings['cri1'] = $time. '_' .uniqid();
-
-            // checksum 1 - checksum for session token
-            $settings['cs1'] = hash(
-                $settings['hash_type'],
-                $settings['merchant_id'] . $settings['merchantsite_id']
-                    . $settings['cri1'] . $time . $settings['secret_key']
-            );
-
-            // client request id 2
-            $time = date('YmdHis', time());
-            $settings['cri2'] = $time. '_' .uniqid();
-
-            // checksum 2 - checksum for get apms
-            $time = date('YmdHis', time());
-            $settings['cs2'] = hash(
-                $settings['hash_type'],
-                $settings['merchant_id'] . $settings['merchantsite_id']
-                    . $settings['cri2'] . $time . $settings['secret_key']
-            );
-            
-            $res = SC_REST_API::get_rest_apms($settings);
-            
-            // set template data with the payment methods
-            $data['payment_methods']  = array();
-            if(is_array($res) && isset($res['paymentMethods']) && !empty($res['paymentMethods'])) {
-                $data['payment_methods'] = $res['paymentMethods'];
-            }
-            else {
-                SC_LOGGER::create_log($res, 'API response: ');
-                
-                echo
-                    '<script type="text/javascript">location.href = "'
-                        . $this->url->link($ctr_url_path . '/fail') . '";</script>';
-                exit;
-            }
-            # get APMs END
-            
             // add icons for the upos
             $data['icons']  = array();
             $data['upos']   = array();
 
-            if($upos && $data['payment_methods']) {
+            if($upos) {
                 foreach($upos as $upo_key => $upo) {
                     if(
                         @$upo['upoStatus'] != 'enabled'
@@ -283,10 +281,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             ));
             
             if(!$resp || !isset($resp['sessionToken']) || !$resp['sessionToken']) {
-                SC_LOGGER::create_log('Error when trying to generate Session Token for Fields! ');
-//                echo '<script type="text/javascript">location.href = "'
-//                    . $this->url->link($ctr_url_path . '/fail') . '";</script>';
-//                exit;
+                SC_LOGGER::create_log($resp, 'Error when trying to generate Session Token for Fields! :');
+                
+                echo
+                    '<script type="text/javascript">alert("'
+                        . $this->language->get('pm_error') . '")</script>';
+                exit;
             }
             
             unset($settings['secret_key']);

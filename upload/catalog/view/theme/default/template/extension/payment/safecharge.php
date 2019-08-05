@@ -134,7 +134,7 @@
     <?php endforeach; ?>
         
     <div id="reload_apms_warning" class="alert alert-danger hide">
-        <strong><?= $$data['sc_attention']; ?></strong> <?= $$data['sc_go_to_step_2_error']; ?>
+        <strong><?= $data['sc_attention']; ?></strong> <?= $data['sc_go_to_step_2_error']; ?>
         <a href="javascript:void(0);" class="close" onclick="$(this).parent('div').addClass('hide');" aria-label="close" title="close">&times;</a>
     </div>
         
@@ -231,7 +231,9 @@
         <div class="alert alert-danger hide"><?= $data['rest_no_apms_error']; ?></div>
     <?php endif;?> 
         
-    <input type="hidden" name="lst" id="sc_lst" value="<?= $data['sessionToken']; ?>" />
+    <?php if(isset($data['sessionToken']) && $data['sessionToken']): ?>
+        <input type="hidden" name="lst" id="sc_lst" value="<?= $data['sessionToken']; ?>" />
+    <?php endif; ?>
         
     <div class="buttons">
         <div class="pull-right">
