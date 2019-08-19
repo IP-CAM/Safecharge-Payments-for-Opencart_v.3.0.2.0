@@ -225,11 +225,10 @@
           {% set remaining_total = 0 %}
           
           {% for total in totals %}
-                {% set myVal = myVal + total.text %}
-                <tr>
-                  <td colspan="4" class="text-right">{{ total.title }}</td>
-                  <td class="text-right">{{ total.text }}</td>
-                </tr>
+		<tr>
+		  <td colspan="4" class="text-right">{{ total.title }}</td>
+		  <td class="text-right">{{ total.text }}</td>
+		</tr>
           {% endfor %}
           
                 {% if refunds %}
