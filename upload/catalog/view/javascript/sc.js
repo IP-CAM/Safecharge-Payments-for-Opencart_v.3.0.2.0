@@ -100,6 +100,9 @@ function scValidateAPMFields() {
                         else if(result.error.message) {
                             alert(result.error.message);
                         }
+                        else {
+                            alert('Please, check all fields and try again!');
+                        }
                     }
                     catch (exception) {
                         console.log(exception);
