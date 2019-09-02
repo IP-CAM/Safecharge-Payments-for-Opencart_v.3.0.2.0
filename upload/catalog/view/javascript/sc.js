@@ -1,14 +1,57 @@
-var billingCountryName = '';
-var paymentAPI = '';
-var tokAPMs = ['cc_card', 'paydotcom'];
-var tokAPMsFields = {
-    cardNumber: 'ccCardNumber'
-    ,expirationMonth: 'ccExpMonth'
-    ,expirationYear: 'ccExpYear'
-    ,cardHolderName: 'ccNameOnCard'
-    ,CVV: ''
-};
-var selectedPM = '';
+var billingCountryName  = '';
+var paymentAPI          = '';
+var tokAPMs             = ['cc_card', 'dc_card', 'paydotcom'];
+var selectedPM          = '';
+
+/**
+ * Function createSCFields
+ * Call SafeCharge method and pass the parameters
+ */
+function createSCFields() {
+    sfc = SafeCharge(scData);
+
+    // prepare fields
+    var fields = sfc.fields({
+        locale: scLocale
+    });
+
+    // set some classes
+    var elementClasses = {
+        focus: 'focus'
+        ,empty: 'empty'
+        ,invalid: 'invalid'
+        
+    };
+    
+    var elementStyles = {
+        base: {
+            fontSize: 12
+            ,color: '#666'
+            ,'::placeholder': {
+                color: 'grey'
+            }
+        }
+    }
+
+    // describe fields
+    var cardNumber = sfcFirstField = fields.create('ccNumber', {
+        classes: elementClasses
+        ,style: elementStyles
+    });
+    cardNumber.attach('#sc_card_number');
+
+    var cardExpiry = fields.create('ccExpiration', {
+        classes: elementClasses
+        ,style: elementStyles
+    });
+    cardExpiry.attach('#sc_card_expiry');
+
+    var cardCvc = fields.create('ccCvc', {
+        classes: elementClasses
+        ,style: elementStyles
+    });
+    cardCvc.attach('#sc_card_cvc');
+}
 
 /**
   * Function showErrorLikeInfo
@@ -34,185 +77,141 @@ var selectedPM = '';
 function scValidateAPMFields() {
     console.log('scValidateAPMFields()')
     
-    var formValid = true;
-     
-    if(selectedPM != '') {
-        $('#sc_pm_error').addClass('hide');
-        
-        var checkId = 'sc_payment_method_' + selectedPM;
-        
-        // iterate over payment fields
-        $('#' + checkId).closest('li.apm_container').find('.apm_fields input').each(function(){
-            var apmField = $(this);
-            
-            if (
-                typeof apmField.attr('pattern') != 'undefined'
-                && apmField.attr('pattern') !== false
-                && apmField.attr('pattern') != ''
-            ) {
-                var regex = new RegExp(apmField.attr('pattern'), "i");
-
-                // SHOW error
-                if(regex.test(apmField.val()) == false || apmField.val() == '') {
-                    apmField.parent('.apm_field').find('.apm_error')
-                        .removeClass('error_info hide');
-
-                    formValid = false;
-                }
-                // HIDE error
-                else {
-                    apmField.parent('.apm_field').find('.error').addClass('hide');
-                }
-            }
-        });
-    }
-    else {
-        formValid = false;
-    }
-    
-    if(!formValid) {
-        $('#sc_pm_error').removeClass('hide');
-        window.location.hash = 'sc_pm_error';
-        window.location.hash;
-        return;
-    }
-    
-    if(tokAPMs.indexOf(selectedPM) == -1) {
-        $('form#safechargesubmit').submit();
-        return;
-    }
-    
-    var payload = {
-        merchantSiteId: '',
-        sessionToken:   '',
-        billingAddress: {
-            city:       $('#safechargesubmit input[name="city"]').val(),
-            country:    $('#safechargesubmit input[name="country"]').val(),
-            zip:        $('#safechargesubmit input[name="zip"]').val(),
-            email:      $('#safechargesubmit input[name="email"]').val(),
-            firstName:  $('#safechargesubmit input[name="first_name"]').val(),
-            lastName:   $('#safechargesubmit input[name="last_name"]').val()
-        },
-        cardData: {
-            cardNumber:         $('#' + selectedPM + '_' + tokAPMsFields.cardNumber).val(),
-            cardHolderName:     $('#' + selectedPM + '_' + tokAPMsFields.cardHolderName).val(),
-            expirationMonth:    $('#' + selectedPM + '_' + tokAPMsFields.expirationMonth).val(),
-            expirationYear:     $('#' + selectedPM + '_' + tokAPMsFields.expirationYear).val(),
-            CVV:                null
-        }
-    };
-    
-    // we set environment only if its test
-    if(typeof scTestEnv != 'undefined' && scTestEnv == 'yes') {
-        payload.environment = 'test';
-    }
-    
     // show Loading... button
     $('#sc_validate_submit_btn')
         .prop('disabled', true)
         .val(scBtnLoadingText);
+    
+    var formValid = true;
+    
+    if(typeof selectedPM != 'undefined' && selectedPM != '') {
+        // use cards
+        if(selectedPM == 'cc_card' || selectedPM == 'dc_card' || selectedPM == 'paydotcom') {
+            sfc.getToken(sfcFirstField).then(function(result) {
+                if (result.status !== 'SUCCESS') {
+                    $('#sc_validate_submit_btn')
+                        .prop('disabled', false)
+                        .val(scBtnConfirmText);
 
-    // call rest api to get first 3 parameters of payload
-    $.ajax({
-        type: "POST",
-        url: payloadURL,
-        data: { needST: 1 }, // need a Session Token
-        dataType: 'json'
-    })
-        .done(function(resp){
-            if(resp.status == 1 && typeof resp.data != 'undefined') {
-                payload.merchantSiteId = resp.data.merchantId;
-                payload.sessionToken = resp.data.sessionToken;
-
-                // get tokenization card number
-                if(typeof Safecharge != 'undefined') {
-                    Safecharge.card.createToken(payload, safechargeResultHandler);
+                    try {
+                        if(result.reason) {
+                            alert(result.reason);
+                        }
+                        else if(result.error.message) {
+                            alert(result.error.message);
+                        }
+                        else {
+                            alert('Please, check all fields and try again!');
+                        }
+                    }
+                    catch (exception) {
+                        console.log(exception);
+                        alert("Unexpected error, please try again later!");
+                    }
                 }
                 else {
-                    $('#sc_pm_error span').html(scTokenError);
-                    $('#sc_pm_error').removeClass('hide');
-                    console.log('Safecharge Object is undefined.');
+                    jQuery('#' + selectedPM + '_ccTempToken').val(result.ccTempToken);
+                    jQuery('#sc_lst').val(result.sessionToken);
+                    $('form#safechargesubmit').submit();
                 }
-            }
-            else {
-                $('#sc_pm_error span').html(scTokenError);
-                $('#sc_pm_error').removeClass('hide');
-            }
-        });
-}
-
-/**
-  * Function safechargeResultHandler
-  * This function is just a handler for createToken method.
-  * It just replaces the card number with a token.
-  * 
-  * @param {object} resp
-  */
-function safechargeResultHandler(resp) {
-    console.log('safechargeResultHandler()');
-    
-    if(resp.status == 'ERROR') {
-        // show Confirm Order button
-        $('#sc_validate_submit_btn')
-            .prop('disabled', false)
-            .val(scBtnConfirmText);
-        
-        $('#sc_pm_error span').html(scTokenError2);
-        if(typeof resp.reason != 'undefined' && resp.reason != '') {
-            $('#sc_pm_error span').html(resp.reason);
+            });
         }
-        $('#sc_pm_error').removeClass('hide');
+        // use APM data
+        else if(isNaN(parseInt(selectedPM))) {
+            var checkId = 'sc_payment_method_' + selectedPM;
+
+            // iterate over payment fields
+            $('#' + checkId).closest('li.apm_container').find('.apm_fields input').each(function(){
+                var apmField = $(this);
+
+                if (
+                    typeof apmField.attr('pattern') != 'undefined'
+                    && apmField.attr('pattern') !== false
+                    && apmField.attr('pattern') != ''
+                ) {
+                    var regex = new RegExp(apmField.attr('pattern'), "i");
+
+                    // SHOW error
+                    if(apmField.val() == '' || regex.test(apmField.val()) == false) {
+                        apmField.parent('.apm_field').find('.apm_error')
+                            .removeClass('error_info hide');
+
+                        formValid = false;
+                    }
+                    else {
+                        apmField.parent('.apm_field').find('.apm_error')
+                            .addClass('hide');
+                    }
+                }
+                else if(apmField.val() == '') {
+                    formValid = false;
+                }
+            });
+
+            if(!formValid) {
+                scFormFalse();
+                return;
+            }
+
+            $('form#safechargesubmit').submit();
+        }
+        // use UPO data
+        else {
+            if(
+                $('#upo_cvv_field_' + selectedPM).length > 0
+                && $('#upo_cvv_field_' + selectedPM).val() == ''
+            ) {
+                scFormFalse();
+                return;
+            }
+
+            jQuery('#safechargesubmit').submit();
+        }
     }
-    else if(resp.status == 'SUCCESS') {
-        $('#' + selectedPM + '_' + tokAPMsFields.cardNumber).val(resp.ccTempToken);
-        
-        $('form#safechargesubmit')
-            .append('<input type="hidden" name="lst", value="'+resp.sessionToken+'" />')
-            .submit();
+    else {
+        scFormFalse();
+        return;
     }
 }
 
+function scFormFalse() {
+    $('#sc_pm_error').removeClass('hide');
+    window.location.hash = 'sc_pm_error';
+    window.location.hash;
+    
+    $('#sc_validate_submit_btn')
+        .prop('disabled', false)
+        .val(scBtnConfirmText);
+}
 
 $(function() {
+    createSCFields();
+    
     // when click on APM payment method
     $('body').on('click', 'form#safechargesubmit .apm_title', function() {
-        // hide error under title
-        $('#sc_pm_error').addClass('hide');
-        
-        // hide all check marks 
-        $('#sc_apms_list').find('.apm_title i').addClass('hide');
-        
-        // hide all containers with fields
-        $('#sc_apms_list').find('.apm_fields').each(function(){
-            var self = $(this);
-            if(self.css('display') == 'block') {
-                self.slideToggle('slow');
-            }
-        });
-        
-        // mark current payment method
-        $(this).find('i').removeClass('hide');
-        
-        // hide bottom border of apm_fields if the container is empty
-        if($(this).parent('li').find('.apm_fields').html() == '') {
-            $(this).parent('li').find('.apm_fields').css('border-bottom', 0);
-        }
-        // expand payment fields
-        if($(this).parent('li').find('.apm_fields').css('display') == 'none') {
-            $(this).parent('li').find('.apm_fields').slideToggle('slow');
-        }
-        
-        // unchck SC payment methods
-        $('form#safechargesubmit').find('input.sc_payment_method_field').attr('checked', false);
-        
+        var self = $(this);
         // check current radio
-        var currRadio = $(this).find('input');
+        var currRadio = self.find('input');
         currRadio.prop('checked', true);
         
         selectedPM = currRadio.val();
         
-        // hide errors
-        $('.apm_error').addClass('hide');
+        // clear all upo cvv fields
+        $('#safechargesubmit .upo_cvv_field').val('');
+        
+        // hide all check marks 
+        $('#safechargesubmit').find('.apm_title i').addClass('hide');
+        
+        // mark current payment method
+        self.find('i').removeClass('hide');
+        
+        // hide all apm_fields
+        $('#safechargesubmit .apm_fields').fadeOut("slow")
+            .promise()
+            .done(function(){
+                // show current apm_fields
+                self.parent('.apm_container').find('.apm_fields').toggle('slow');
+            });
     });
     
     // when change Payment Country and not click on Continue button show warning!

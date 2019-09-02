@@ -225,10 +225,17 @@
           {% set remaining_total = 0 %}
           
           {% for total in totals %}
+<<<<<<< HEAD
 		<tr>
 		  <td colspan="4" class="text-right">{{ total.title }}</td>
 		  <td class="text-right">{{ total.text }}</td>
 		</tr>
+=======
+            <tr>
+              <td colspan="4" class="text-right">{{ total.title }}</td>
+              <td class="text-right">{{ total.text }}</td>
+            </tr>
+>>>>>>> v1.1
           {% endfor %}
           
                 {% if refunds %}
@@ -487,7 +494,6 @@
                         alert(resp.msg);
                     }
                     else {
-                        alert('You will be redirect to Orders list. Please, check the order History for more information!');
                         window.location.href = window.location.toString().replace('/info', '');
                     }
                     

@@ -1,6 +1,11 @@
 <?php
 
+if (!session_id()) {
+    session_start();
+}
+
 require_once DIR_SYSTEM .'config'. DIRECTORY_SEPARATOR. 'sc_config.php';
+require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_logger.php';
 require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
 
 class ControllerExtensionPaymentSafeCharge extends Controller
@@ -271,7 +276,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     private function ajax_call()
     {
-        $this->create_log($this->request->post['action'], 'ajax_call(): ');
+        SC_LOGGER::create_log($this->request->post['action'], 'ajax_call(): ');
         
         try {
             $action = $this->request->post['action'];
@@ -281,7 +286,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             }
         }
         catch (Exception $ex) {
-            $this->create_log($ex->getMessage(), 'In ajax miss orderId or action: ');
+            SC_LOGGER::create_log($ex->getMessage(), 'In ajax miss orderId or action: ');
             echo json_encode(array('status' => 0, 'msg' => $ex->getMessage()));
             exit;
         }
@@ -364,7 +369,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $order_status = 11; // refunded
             }
             
-            $this->create_log($order_status, '$order_status: ');
+            SC_LOGGER::create_log($order_status, '$order_status: ');
             
             $this->db->query(
                 "INSERT INTO " . DB_PREFIX ."order_history (order_id, order_status_id, notify, comment, date_added) "
@@ -377,7 +382,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
-        $_SESSION['create_log'] = $this->session->data['create_logs'] = $settings['create_log'];
+        $_SESSION['create_logs'] = $this->session->data['create_logs'] = $settings['create_log'];
         $clientUniqueId = uniqid();
         
         $notify_url = $this->url->link(
@@ -539,7 +544,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         // get GW settings
         $settings = $this->get_gw_settings();
         
-        $_SESSION['create_log'] = $this->session->data['create_logs'] = $settings['create_log'];
+        $_SESSION['create_logs'] = $this->session->data['create_logs'] = $settings['create_log'];
         
         $time = date('YmdHis', time());
         
@@ -579,7 +584,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         $params['checksum'] = $checksum;
         
-        $this->create_log($params, 'The params for Void/Settle: ');
+        SC_LOGGER::create_log($params, 'The params for Void/Settle: ');
         
         SC_REST_API::void_and_settle_order($params, $this->request->post['action'], true);
     }
@@ -681,6 +686,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         exit;
     }
     
+<<<<<<< HEAD
     /**
      * Function create_log
      * Create logs. You MUST have defined SC_LOG_FILE_PATH const,
@@ -734,4 +740,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $logger->write($d . "\n");
         }
     }
+=======
+>>>>>>> v1.1
 }

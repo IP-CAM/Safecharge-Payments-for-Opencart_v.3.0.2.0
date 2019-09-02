@@ -30,10 +30,7 @@ class SC_REST_API
         
         $time = date('YmdHis', time());
         
-    //    self::create_log($refund, 'Refund data: ');
-    //    self::create_log($settings, 'Refund Settings data: ');
-        
-        try {
+    	try {
             $refund_url = SC_TEST_REFUND_URL;
             $cpanel_url = SC_TEST_CPANEL_URL;
 
@@ -87,9 +84,9 @@ class SC_REST_API
             );
         }
         
-        self::create_log($refund_url, 'URL: ');
-        self::create_log($ref_parameters, 'refund_parameters: ');
-        self::create_log($other_params, 'other_params: ');
+        SC_LOGGER::create_log($refund_url, 'URL: ');
+        SC_LOGGER::create_log($ref_parameters, 'refund_parameters: ');
+        SC_LOGGER::create_log($other_params, 'other_params: ');
         
         $json_arr = self::call_rest_api(
             $refund_url,
@@ -98,7 +95,7 @@ class SC_REST_API
             $other_params
         );
         
-        self::create_log($json_arr, 'Refund Response: ');
+        SC_LOGGER::create_log($json_arr, 'Refund Response: ');
         return $json_arr;
     }
     
@@ -114,7 +111,7 @@ class SC_REST_API
      */
     public static function void_and_settle_order($data, $action, $is_ajax = false)
     {
-        self::create_log('', 'void_and_settle_order() - ' . $action . ': ');
+        SC_LOGGER::create_log('', 'void_and_settle_order() - ' . $action . ': ');
         $resp = false;
         $status = 1;
         
@@ -130,7 +127,7 @@ class SC_REST_API
             $resp = self::call_rest_api($url, $data, $data['checksum']);
         }
         catch (Exception $e) {
-            self::create_log($e->getMessage(), $action . ' order Exception ERROR when call REST API: ');
+            SC_LOGGER::create_log($e->getMessage(), $action . ' order Exception ERROR when call REST API: ');
             
             if($is_ajax) {
                 echo json_encode(array('status' => 0, 'data' => $e->getMessage()));
@@ -140,7 +137,7 @@ class SC_REST_API
             return false;
         }
         
-        self::create_log($resp, 'SC_REST_API void_and_settle_order() full response: ');
+        SC_LOGGER::create_log($resp, 'SC_REST_API void_and_settle_order() full response: ');
         
         if(
             !$resp || !is_array($resp)
@@ -171,11 +168,16 @@ class SC_REST_API
      * 
      * @return mixed
      */
-    public static function call_rest_api($url, $checksum_params, $checksum, $other_params = array())
+    public static function call_rest_api($url, $checksum_params, $checksum = '', $other_params = array())
     {
         $resp = false;
         
-        $checksum_params['checksum'] = $checksum;
+        if(
+            (!isset($checksum_params['checksum']) || empty($checksum_params['checksum']))
+            && !empty($checksum)
+        ) {
+            $checksum_params['checksum'] = $checksum;
+        }
         
         if(!empty($other_params) and is_array($other_params)) {
             $params = array_merge($checksum_params, $other_params);
@@ -189,10 +191,10 @@ class SC_REST_API
             $params['deviceDetails'] = self::get_device_details();
         }
         
-        self::create_log($params, 'SC_REST_API, parameters for the REST API call: ');
+        SC_LOGGER::create_log($params, 'SC_REST_API, parameters for the REST API call: ');
         
         $json_post = json_encode($params);
-    //    self::create_log($json_post, 'params as json: ');
+    //    SC_LOGGER::create_log($json_post, 'params as json: ');
         
         try {
             $header =  array(
@@ -214,11 +216,11 @@ class SC_REST_API
             $resp = curl_exec($ch);
             curl_close ($ch);
             
-            self::create_log($url, 'REST API URL: ');
-        //    self::create_log($resp, 'REST API response: ');
+            SC_LOGGER::create_log($url, 'REST API URL: ');
+        //    SC_LOGGER::create_log($resp, 'REST API response: ');
         }
         catch(Exception $e) {
-            self::create_log($e->getMessage(), 'Exception ERROR when call REST API: ');
+            SC_LOGGER::create_log($e->getMessage(), 'Exception ERROR when call REST API: ');
             return false;
         }
         
@@ -252,7 +254,7 @@ class SC_REST_API
             || empty($session_token_data['sessionToken'])
             || !is_string($session_token_data['sessionToken'])
         ) {
-            self::create_log($session_token_data, 'Session Token is FALSE.');
+            SC_LOGGER::create_log($session_token_data, 'Session Token is FALSE.');
             
             $resp = array(
                 'status' => 0,
@@ -286,7 +288,7 @@ class SC_REST_API
                 'type'              => '', // optional
             );
             
-            self::create_log('', 'Call REST API to get REST APMs: ');
+            SC_LOGGER::create_log('', 'Call REST API to get REST APMs: ');
 
             $resp_arr = self::call_rest_api(
                 $data['test'] == 'yes' ? SC_TEST_REST_PAYMENT_METHODS_URL : SC_LIVE_REST_PAYMENT_METHODS_URL,
@@ -319,159 +321,57 @@ class SC_REST_API
     }
     
     /**
-     * Function process_payment
-     * Here are the different payment methods
+     * Function get_user_upos
+     * Get users UPOs
      * 
-     * @param array $data - contains the checksum
-     * @param array $sc_variables
-     * @param string $order_id
-     * @param string $payment_method - apm|d3d
-     * 
-     * @return array|bool
+     * @param array $params - array with parameters
+     * @param array $data - other parameters not used for the UPOs call
+     * @param bool $is_ajax
      */
-    public static function process_payment($data, $sc_variables, $order_id, $payment_method)
+    public static function get_user_upos($params, $data, $is_ajax = false)
     {
-        $resp = false;
-        
         try {
-            // common parameters for the methods
-            $params = array(
-                'merchantId'        => $sc_variables['merchantId'],
-                'merchantSiteId'    => $sc_variables['merchantSiteId'],
-                'userTokenId'       => $data['email'], // the email of the logged user or user who did the payment
-                'clientUniqueId'    => $order_id,
-                'clientRequestId'   => $data['client_request_id'],
-                'currency'          => $data['currency'],
-                'amount'            => (string) $data['total_amount'],
-                'amountDetails'     => array(
-                    'totalShipping'     => '0.00',
-                    'totalHandling'     => $data['handling'], // this is actually shipping
-                    'totalDiscount'     => @$data['discount'] ? $data['discount'] : '0.00',
-                    'totalTax'          => @$data['total_tax'] ? $data['total_tax'] : '0.00',
-                ),
-                'items'             => $data['items'],
-                'userDetails'       => array(
-                    'firstName'         => $data['first_name'],
-                    'lastName'          => $data['last_name'],
-                    'address'           => $data['address1'],
-                    'phone'             => $data['phone1'],
-                    'zip'               => $data['zip'],
-                    'city'              => $data['city'],
-                    'country'           => $data['country'],
-                    'state'             => '',
-                    'email'             => $data['email'],
-                    'county'            => '',
-                ),
-                'shippingAddress'   => array(
-                    'firstName'         => $data['shippingFirstName'],
-                    'lastName'          => $data['shippingLastName'],
-                    'address'           => $data['shippingAddress'],
-                    'cell'              => '',
-                    'phone'             => '',
-                    'zip'               => $data['shippingZip'],
-                    'city'              => $data['shippingCity'],
-                    'country'           => $data['shippingCountry'],
-                    'state'             => '',
-                    'email'             => '',
-                    'shippingCounty'    => $data['shippingCountry'],
-                ),
-                'billingAddress'   => array(
-                    'firstName'         => $data['first_name'],
-                    'lastName'          => $data['last_name'],
-                    'address'           => $data['address1'],
-                    'cell'              => '',
-                    'phone'             => $data['phone1'],
-                    'zip'               => $data['zip'],
-                    'city'              => $data['city'],
-                    'country'           => $data['country'],
-                    'state'             => $data['state'],
-                    'email'             => $data['email'],
-                    'county'            => '',
-                ),
-                'urlDetails'        => $data['urlDetails'],
-                'timeStamp'         => $data['time_stamp'],
-                'checksum'          => $data['checksum'],
-                'webMasterID'       => @$data['webMasterId'],
-                'deviceDetails'     => self::get_device_details(),
-            );
-
-            // set parameters specific for the payment method
-            switch ($payment_method) {
-                case 'apm':
-                    // for D3D we use other token
-                    $session_token_data = self::get_session_token($sc_variables);
-                    $session_token = @$session_token_data['sessionToken'];
-                    
-                    self::create_log($session_token_data, 'session_token_data: ');
-                    
-                    if(!$session_token) {
-                        return false;
-                    }
-
-                    $params['paymentMethod'] = $sc_variables['APM_data']['payment_method'];
-                    
-                    // append payment method credentionals
-                    if(isset($sc_variables['APM_data']['apm_fields'])) {
-                        $params['userAccountDetails'] = $sc_variables['APM_data']['apm_fields'];
-                    }
-                    
-                    $params['sessionToken'] = $session_token;
-
-                    $endpoint_url = $sc_variables['test'] == 'no' ? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
-                    break;
-
-                case 'd3d':
-                    // in D3D use the session token from card tokenization
-                    if(!isset($sc_variables['lst']) || empty($sc_variables['lst']) || !$sc_variables['lst']) {
-                        self::create_log(@$sc_variables['lst'], 'Missing Last Session Token: ');
-                        return false;
-                    }
-
-                    $params['sessionToken'] = $sc_variables['lst'];
-                    $params['isDynamic3D'] = 1;
-                    
-                    if(isset($sc_variables['APM_data']['apm_fields']['ccTempToken'])) {
-                        $params['cardData']['ccTempToken'] = $sc_variables['APM_data']['apm_fields']['ccTempToken'];
-                    }
-                    elseif(isset($sc_variables['APM_data']['apm_fields']['ccCardNumber'])) {
-                        $params['cardData']['ccTempToken'] = $sc_variables['APM_data']['apm_fields']['ccCardNumber'];
-                    }
-                    
-                    if(isset($sc_variables['APM_data']['apm_fields']['CVV'])) {
-                        $params['cardData']['CVV'] = $sc_variables['APM_data']['apm_fields']['CVV'];
-                    }
-                    if(isset($sc_variables['APM_data']['apm_fields']['ccNameOnCard'])) {
-                        $params['cardData']['cardHolderName'] = $sc_variables['APM_data']['apm_fields']['ccNameOnCard'];
-                    }
-                    
-                    $endpoint_url = $sc_variables['test'] == 'no' ? SC_LIVE_D3D_URL : SC_TEST_D3D_URL;
-                    break;
-
-                // if we can't set $endpoint_url stop here
-                default:
-                    self::create_log($payment_method, 'Not supported payment method: ');
-                    return false;
+            if(isset($data['secret'])) {
+                $params['merchantSecretKey'] = $data['secret'];
             }
-
-            $resp = self::call_rest_api(
-                $endpoint_url,
-                $params,
-                $data['checksum']
-            );
             
-            self::create_log($resp, 'REST API Response when Process Payment: ');
+            if(isset($data['checksum'])) {
+                $checksum = $data['checksum'];
+            }
+            else {
+                $checksum = hash(
+                    $data['hash_type'],
+                    $params['merchantId'] . $params['merchantSiteId'] . $params['userTokenId']
+                        . $params['clientRequestId'] . $params['timeStamp'] . $data['secret']
+                );
+            }
+            
+            $upos = self::call_rest_api(
+                $data['test'] == 'yes' ? SC_TEST_USER_UPOS_URL : SC_LIVE_USER_UPOS_URL,
+                $params,
+                $checksum
+            );
         }
-        catch(Exception $e) {
-            self::create_log($e->getMessage(), 'Process Payment Exception ERROR: ');
+        catch (Exception $ex) {
+            SC_LOGGER::create_log($ex->getMessage(), 'get_user_upos() Exception: ');
+            
+            if($is_ajax) {
+                echo json_encode(array('status' => 0, 'data' => print_r($ex->getMessage()), true));
+                exit;
+            }
+            
             return false;
         }
         
-        if(!$resp || !is_array($resp)) {
-            self::create_log($resp, 'Process Payment response: ');
-            return false;
+        if($is_ajax) {
+            echo json_encode(array(
+                'status' => 1,
+                'data' => $upos,
+            ));
+            exit;
         }
         
-        return $resp;
+        return $upos;
     }
     
     /**
@@ -487,11 +387,10 @@ class SC_REST_API
     public static function get_session_token($data, $is_ajax = false)
     {
         if(!isset($data['merchantId'], $data['merchantSiteId'])) {
-            self::create_log($data, 'Missing mandatory session variables: ');
+            SC_LOGGER::create_log($data, 'Missing mandatory session variables: ');
             return false;
         }
         
-        $time = date('YmdHis', time());
         $resp_arr = array();
         
         try {
@@ -499,14 +398,14 @@ class SC_REST_API
                 'merchantId'        => $data['merchantId'],
                 'merchantSiteId'    => $data['merchantSiteId'],
                 'clientRequestId'   => $data['cri1'],
-                'timeStamp'         => current(explode('_', $data['cri1'])),
+                'timeStamp'         => @$data['timeStamp'] ? $data['timeStamp'] : date('YmdHis', time()),
             );
 
-            self::create_log(
+            SC_LOGGER::create_log(
                 $data['test'] == 'yes' ? SC_TEST_SESSION_TOKEN_URL : SC_LIVE_SESSION_TOKEN_URL,
                 'Call REST API for Session Token with URL: '
             );
-            self::create_log('', 'Call REST API for Session Token. ');
+            SC_LOGGER::create_log('Call REST API for Session Token. ');
 
             $resp_arr = self::call_rest_api(
                 $data['test'] == 'yes' ? SC_TEST_SESSION_TOKEN_URL : SC_LIVE_SESSION_TOKEN_URL,
@@ -515,7 +414,7 @@ class SC_REST_API
             );
         }
         catch(Exception $e) {
-            self::create_log($e->getMessage(), 'Getting SessionToken Exception ERROR: ');
+            SC_LOGGER::create_log($e->getMessage(), 'Getting SessionToken Exception ERROR: ');
             
             if($is_ajax) {
                 echo json_encode(array('status' => 0, 'msg' => $e->getMessage()));
@@ -531,7 +430,7 @@ class SC_REST_API
             || !isset($resp_arr['status'])
             || $resp_arr['status'] != 'SUCCESS'
         ) {
-            self::create_log($resp_arr, 'getting getSessionToken error: ');
+            SC_LOGGER::create_log($resp_arr, 'getting getSessionToken error: ');
             
             if($is_ajax) {
                 echo json_encode(array('status' => 0));
@@ -557,7 +456,7 @@ class SC_REST_API
      * 
      * @return array $device_details
      */
-    private static function get_device_details()
+    public static function get_device_details()
     {
         $device_details = array(
             'deviceType'    => 'UNKNOWN', // DESKTOP, SMARTPHONE, TABLET, TV, and UNKNOWN
@@ -649,7 +548,7 @@ class SC_REST_API
     private static function return_response($data, $is_ajax = false)
     {
         if(!is_array($data)) {
-            self::create_log($data, 'The data passed to return_response() is not array: ');
+            SC_LOGGER::create_log($data, 'The data passed to return_response() is not array: ');
             return false;
         }
         
@@ -661,6 +560,7 @@ class SC_REST_API
         return $data;
     }
     
+<<<<<<< HEAD
     /**
      * Function create_log
      * Create logs. You MUST have defined SC_LOG_FILE_PATH const,
@@ -715,3 +615,6 @@ class SC_REST_API
         }
     }
 }
+=======
+}
+>>>>>>> v1.1

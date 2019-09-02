@@ -2,10 +2,29 @@
 <modification>
     <name>SC Modification</name>
     <code>SafeCharge</code>
+<<<<<<< HEAD
     <version>1.0</version>
     <author>SafeCharge</author>
     <link>https://www.safecharge.com/</link>
     
+=======
+    <version>1.1</version>
+    <author>SafeCharge</author>
+    <link>https://www.safecharge.com/</link>
+    
+    <!-- append SC Fields script to the header -->
+    <file path="catalog/controller/common/header.php">
+        <operation>
+            <search><![CDATA[
+                $data['scripts'] = $this->document->getScripts('header');
+            ]]></search>
+            <add position="before"><![CDATA[
+                $this->document->addScript('https://dev-mobile.safecharge.com/cdn/WebSdk/dist/safecharge.js');
+            ]]></add>
+        </operation>
+    </file>
+    
+>>>>>>> v1.1
     <!-- get the SC GW Settings and replace view file if there are SC GW Settings, info() -->
     <file path="admin/controller/sale/order.php">
         <operation>
@@ -111,7 +130,13 @@
 
                     if(is_array($sc_refunds) && $sc_refunds) {
                         foreach($sc_refunds as $ref) {
+<<<<<<< HEAD
                             $refunds_sum += $ref['amount'];
+=======
+                            if(intval($ref['approved']) == 1) {
+								$refunds_sum += $ref['amount'];
+							}
+>>>>>>> v1.1
                         }
 
                         $data['orders'][$key]['total'] = $this->currency->format(
