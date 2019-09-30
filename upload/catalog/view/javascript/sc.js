@@ -1,6 +1,5 @@
 var billingCountryName  = '';
-var paymentAPI          = '';
-var tokAPMs             = ['cc_card', 'dc_card', 'paydotcom'];
+var tokAPMs             = ['cc_card', 'dc_card'];
 var selectedPM          = '';
 
 /**
@@ -215,11 +214,9 @@ $(function() {
     });
     
     // when change Payment Country and not click on Continue button show warning!
-    if(paymentAPI == 'rest') {
-        $('#collapse-payment-address').on('change', '#input-payment-country', function(){
-            $('#reload_apms_warning').removeClass('hide');
-        });
-    }
+    $('#collapse-payment-address').on('change', '#input-payment-country', function(){
+        $('#reload_apms_warning').removeClass('hide');
+    });
     
 });
 // document ready function END

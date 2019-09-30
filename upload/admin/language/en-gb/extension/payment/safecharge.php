@@ -16,7 +16,6 @@ $_['entry_ppp_Payment_URL']       	= 'Payment URL:';
 $_['entry_secret']		      		= 'Merchant Secret Key:';
 $_['entry_hash_type']		      	= 'Merchant Hash type:';
 
-$_['entry_payment_api']		      	= 'Payment solution:';
 $_['entry_option_cashier']		    = 'Hosted Payment Page';
 $_['entry_option_rest']             = 'SafeCharge API';
 

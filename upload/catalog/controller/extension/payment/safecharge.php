@@ -28,7 +28,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		$settings['currencyCode']       = $this->session->data['currency'];
 		$settings['languageCode']       = current(explode('-', $this->session->data['language']));
 		$settings['sc_country']         = $this->session->data['payment_address']['iso_code_2'];
-		$settings['payment_api']        = $this->config->get($settigs_prefix . 'payment_api');
 		$settings['transaction_type']   = $this->config->get($settigs_prefix . 'transaction_type');
 		$settings['test']               = $this->config->get($settigs_prefix . 'test_mode');
 		$settings['hash_type']          = $this->config->get($settigs_prefix . 'hash_type');
@@ -122,326 +121,114 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         $params['merchantLocale']   = $this->get_locale();
         $params['webMasterId']      = 'OpenCart ' . VERSION;
         
-        # for the REST API
-        if($settings['payment_api'] == 'rest') {
-            require_once DIR_SYSTEM . 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR . 'SC_REST_API.php';
-            
-            $settings['merchantId'] = $settings['merchant_id'];
-            $data['merchantSiteId'] = $settings['merchantSiteId'] = $settings['merchantsite_id'];
-            
-            // for the REST set one combined item only
-            $params['items[0][name]']      = $this->session->data['order_id'];
-            $params['items[0][price]']     = $params['total_amount'];
-            $params['items[0][quantity]']  = 1;
-            
-            # get APMs
-            // client request id 1
-            $time = date('YmdHis', time());
-            $settings['cri1'] = $time. '_' .uniqid();
+		require_once DIR_SYSTEM . 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR . 'SC_REST_API.php';
 
-            // checksum 1 - checksum for session token
-            $settings['cs1'] = hash(
-                $settings['hash_type'],
-                $settings['merchant_id'] . $settings['merchantsite_id']
-                    . $settings['cri1'] . $time . $settings['secret_key']
-            );
+		$settings['merchantId'] = $settings['merchant_id'];
+		$data['merchantSiteId'] = $settings['merchantSiteId'] = $settings['merchantsite_id'];
 
-            // client request id 2
-            $time = date('YmdHis', time());
-            $settings['cri2'] = $time. '_' .uniqid();
+		// for the REST set one combined item only
+		$params['items[0][name]']      = $this->session->data['order_id'];
+		$params['items[0][price]']     = $params['total_amount'];
+		$params['items[0][quantity]']  = 1;
 
-            // checksum 2 - checksum for get apms
-            $time = date('YmdHis', time());
-            $settings['cs2'] = hash(
-                $settings['hash_type'],
-                $settings['merchant_id'] . $settings['merchantsite_id']
-                    . $settings['cri2'] . $time . $settings['secret_key']
-            );
-            
-            $res = SC_REST_API::get_rest_apms($settings);
-            
-            if(!is_array($res) || !isset($res['paymentMethods']) || empty($res['paymentMethods'])) {
-                SC_LOGGER::create_log($res, 'Get APMs problem with the response: ');
-                
-                echo
-                    '<script type="text/javascript">alert("'
-                        . $this->language->get('pm_error') . '")</script>';
-                exit;
-            }
-            
-            // set template data with the payment methods
-            $data['payment_methods'] = $res['paymentMethods'];
-            # get APMs END
-            
-            # get UPOs
-            $upos = array();
-            
-            if((bool)$this->customer->isLogged()) {
-                $time = date('YmdHis', time());
-                
-                $upos_data = SC_REST_API::get_user_upos(
-                    array(
-                        'merchantId'        => $settings['merchantId'],
-                        'merchantSiteId'    => $settings['merchantSiteId'],
-                        'userTokenId'       => $params['email'],
-                        'clientRequestId'   => $time . '_' . uniqid(),
-                        'timeStamp'         => $time,
-                    ),
-                    array(
-                        'hash_type' => $settings['hash_type'],
-                        'secret'    => $settings['secret_key'],
-                        'test'      => $settings['test'],
-                    )
-                );
+		# get APMs
+		// client request id 1
+		$time = date('YmdHis', time());
+		$settings['cri1'] = $time. '_' .uniqid();
 
-                if(isset($upos_data['paymentMethods']) && $upos_data['paymentMethods']) {
-                    foreach($upos_data['paymentMethods'] as $upo_data) {
-                        if(
-                            $upo_data['upoStatus'] == 'enabled'
-                            && strtotime(@$upo_data['expiryDate']) > strtotime(date('Ymd'))
-                        ) {
-                            $upos[] = $upo_data;
-                        }
-                    }
-                }
-            }
-            
-            // add icons for the upos
-            $data['icons']  = array();
-            $data['upos']   = array();
+		// checksum 1 - checksum for session token
+		$settings['cs1'] = hash(
+			$settings['hash_type'],
+			$settings['merchant_id'] . $settings['merchantsite_id']
+				. $settings['cri1'] . $time . $settings['secret_key']
+		);
 
-            if($upos) {
-                foreach($upos as $upo_key => $upo) {
-                    if(
-                        @$upo['upoStatus'] != 'enabled'
-                        || (isset($upo['upoData']['ccCardNumber'])
-                            && empty($upo['upoData']['ccCardNumber']))
-                        || (isset($upo['expiryDate'])
-                            && strtotime($upo['expiryDate']) < strtotime(date('Ymd')))
-                    ) {
-                        continue;
-                    }
+		// client request id 2
+		$time = date('YmdHis', time());
+		$settings['cri2'] = $time. '_' .uniqid();
 
-                    // search in payment methods
-                    foreach($data['payment_methods'] as $pm) {
-                        if(@$pm['paymentMethod'] == @$upo['paymentMethodName']) {
-                            if(
-                                in_array(@$upo['paymentMethodName'], array('cc_card', 'dc_card'))
-                                && @$upo['upoData']['brand']
-                            ) {
-                                $data['icons'][@$upo['upoData']['brand']] = str_replace(
-                                    'default_cc_card',
-                                    $upo['upoData']['brand'],
-                                    $pm['logoURL']
-                                );
-                            }
-                            else {
-                                $data['icons'][$pm['paymentMethod']] = $pm['logoURL'];
-                            }
-                            
-                            $data['upos'][] = $upo;
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // specific data for the REST payment
-            $params['client_request_id']    = $time .'_'. uniqid();
-            
-            $params['checksum'] = hash(
-                $settings['hash_type'],
-                stripslashes(
-                    $settings['merchant_id']
-                    .$settings['merchantsite_id']
-                    .$params['client_request_id']
-                    .$params['total_amount']
-                    .$params['currency']
-                    .$order_time
-                    .$settings['secret_key']
-                )
-            );
-            
-            // params for last get_session_token
-            $time = date('YmdHis', time());
-            $un_req_id = uniqid();
-            $st_cs = hash(
-                $settings['hash_type'],
-                $settings['merchant_id'] . $settings['merchantsite_id']
-                    . $un_req_id . $time . $settings['secret_key']
-            );
-            
-            $resp = SC_REST_API::get_session_token(array(
-                'merchantId'        => $settings['merchantId'],
-                'merchantSiteId'    => $settings['merchantSiteId'],
-                'cri1'              => $un_req_id,
-                'cs1'               => $st_cs,
-                'timeStamp'         => $time,
-                'test'              => $settings['test'],
-            ));
-            
-            if(!$resp || !isset($resp['sessionToken']) || !$resp['sessionToken']) {
-                SC_LOGGER::create_log($resp, 'Error when trying to generate Session Token for Fields! :');
-                
-                echo
-                    '<script type="text/javascript">alert("'
-                        . $this->language->get('pm_error') . '")</script>';
-                exit;
-            }
-            
-            unset($settings['secret_key']);
-            $this->session->data['SC_Settings'] = $settings;
+		// checksum 2 - checksum for get apms
+		$time = date('YmdHis', time());
+		$settings['cs2'] = hash(
+			$settings['hash_type'],
+			$settings['merchant_id'] . $settings['merchantsite_id']
+				. $settings['cri2'] . $time . $settings['secret_key']
+		);
 
-            $data['sessionToken']   = $resp['sessionToken'];
-            $data['scLocale']       = substr($params['merchantLocale'], 0, 2);
-            
-            $data['action'] = $this->url->link($ctr_url_path . '/process_payment')
-                . '&create_logs=' . ($settings['create_logs']);
-            
-            $data['payload_url'] = $this->url->link($ctr_url_path . '/sc_ajax_call')
-                . '&create_logs=' . $settings['create_logs'];
-            
-            // fields for the template
-            $data['html_inputs'] = $params;
-        }
-        # for the Cashier
-        else {
-            if(isset($this->session->data['shipping_method']['cost'])) {
-                $params['handling'] = $this->tax->calculate(
-                    $this->session->data['shipping_method']['cost'],
-                    $this->session->data['shipping_method']['tax_class_id'],
-                    $this->config->get('config_tax')
-                );
+		$res = SC_REST_API::get_rest_apms($settings);
 
-                $tax_id = $this->session->data['shipping_method']['tax_class_id'];
-            }
-            
-            // set the Items
-            $i = $items_price = 0;
+		if(!is_array($res) || !isset($res['paymentMethods']) || empty($res['paymentMethods'])) {
+			SC_LOGGER::create_log($res, 'Get APMs problem with the response: ');
 
-            foreach ($prods as $product) {
-                $i++;
-                
-                if(!$tax_id && isset($product['tax_class_id'])) {
-                    $tax_id = $product['tax_class_id'];
-                }
-                
-//                $product_price_total = $this->tax->calculate(
-//                    $product['total'],
-//                    $tax_id,
-//                    $this->config->get('config_tax')
-//                );
-                
-                $product_price = $this->tax->calculate(
-                    $product['price'],
-                    $tax_id,
-                    $this->config->get('config_tax')
-                );
-                
-                $params['item_name_'.$i]      = urlencode($product['name']);
-                $params['item_number_'.$i]    = $product['model'];
-                $params['item_quantity_'.$i]  = $product['quantity'];
-                $params['item_amount_'.$i]    = number_format($product_price, 2, '.', '');
-                
-                $items_price += $product_price * $product['quantity'];
-            }
-            
-            $params['numberofitems'] = $i;
-            
-            # Discounts
-            $discount = 0;
-            
-            // coupon
-            if (isset($this->session->data['coupon'])) {
-                $coupon = $this
-                    ->model_extension_total_coupon
-                    ->getCoupon($this->session->data['coupon']);
-                
-                if ($coupon['type'] != 'P') {
-                    $discount = $coupon['discount'];
-                }
-                else {
-                    $discount = $items_price * $coupon['discount'] / 100;
-                }
-                
-                // when the coupon give free shipping
-                if($coupon['shipping'] == 1) {
-                    $discount += $params['handling'];
-                }
-            }
-            
-            // vauchers
-            if (isset($_this->session->data['voucher'])) {
-                $voucher = $this
-                    ->model_extension_total_voucher
-                    ->getVoucher($this->session->data['voucher']);
-                
-                if (isset($voucher['amount'])) {
-                    $discount += $voucher['amount'];
-                }
-            }
+			echo
+				'<script type="text/javascript">alert("'
+					. $this->language->get('pm_error') . '")</script>';
+			exit;
+		}
 
-            $discount_total = $this->tax->calculate(
-				$discount,
-				$tax_id,
-				$this->config->get('config_tax')
-			);
-            # Discounts END
-            
-            $items_price            = round($items_price, 2);
-            $params['handling']     = round($params['handling'], 2);
-            $discount_total         = round($discount_total, 2);
-            $params['total_amount'] = round($params['total_amount'], 2);
-            
-            // last check for correct calculations
-            $test_diff = $items_price + $params['handling'] - $discount_total - $params['total_amount'];
-            
-            if($test_diff != 0) {
-                SC_LOGGER::create_log($params['handling'], 'handling before $test_diff: ');
-                SC_LOGGER::create_log($discount_total, 'discount_total before $test_diff: ');
-                SC_LOGGER::create_log($test_diff, '$test_diff: ');
-                
-                if($test_diff > 0) {
-                    if($params['handling'] - $test_diff >= 0) {
-						$params['handling'] -= $test_diff; // will decrease
-					}
-                    else {
-                        $discount_total += $test_diff; // will increase
-                    }
-					
-				}
-				else {
-                    if($discount_total + $test_diff > 0) {
-                        $discount_total += $test_diff; // will decrease
-                    }
-                    else {
-                        $params['handling'] += abs($test_diff); // will increase
-                    }
-				}
-            }
-            
-            $params['discount'] = number_format($discount_total, 2, '.', '');
-            $params['handling'] = number_format($params['handling'], 2, '.', '');
-            // set the Items END
-            
-            // the end point URL depends of the test mode and selected payment api
-            $data['action'] = $settings['test'] == 'yes' ?
-                SC_TEST_CASHIER_URL : SC_LIVE_CASHIER_URL;
-            
-            $for_checksum = $settings['secret_key'] . implode('', $params);
-            
-            $params['checksum'] = hash(
-                $settings['hash_type'],
-                stripslashes($for_checksum)
-            );
-            
-            $data['html_inputs'] = $params;
-        //    echo '<pre>'.print_r($params, true).'</pre>';
-            SC_LOGGER::create_log($data['html_inputs'], 'Cashier inputs: ');
-        }
+		// set template data with the payment methods
+		$data['payment_methods'] = $res['paymentMethods'];
+		# get APMs END
+
+		// specific data for the REST payment
+		$params['client_request_id']    = $time .'_'. uniqid();
+
+		$params['checksum'] = hash(
+			$settings['hash_type'],
+			stripslashes(
+				$settings['merchant_id']
+				.$settings['merchantsite_id']
+				.$params['client_request_id']
+				.$params['total_amount']
+				.$params['currency']
+				.$order_time
+				.$settings['secret_key']
+			)
+		);
+
+		// params for last get_session_token
+		$time = date('YmdHis', time());
+		$un_req_id = uniqid();
+		$st_cs = hash(
+			$settings['hash_type'],
+			$settings['merchant_id'] . $settings['merchantsite_id']
+				. $un_req_id . $time . $settings['secret_key']
+		);
+
+		$resp = SC_REST_API::get_session_token(array(
+			'merchantId'        => $settings['merchantId'],
+			'merchantSiteId'    => $settings['merchantSiteId'],
+			'cri1'              => $un_req_id,
+			'cs1'               => $st_cs,
+			'timeStamp'         => $time,
+			'test'              => $settings['test'],
+		));
+
+		if(!$resp || !isset($resp['sessionToken']) || !$resp['sessionToken']) {
+			SC_LOGGER::create_log($resp, 'Error when trying to generate Session Token for Fields! :');
+
+			echo
+				'<script type="text/javascript">alert("'
+					. $this->language->get('pm_error') . '")</script>';
+			exit;
+		}
+
+		unset($settings['secret_key']);
+		$this->session->data['SC_Settings'] = $settings;
+
+		$data['sessionToken']   = $resp['sessionToken'];
+		$data['scLocale']       = substr($params['merchantLocale'], 0, 2);
+
+		$data['action'] = $this->url->link($ctr_url_path . '/process_payment')
+			. '&create_logs=' . ($settings['create_logs']);
+
+		$data['payload_url'] = $this->url->link($ctr_url_path . '/sc_ajax_call')
+			. '&create_logs=' . $settings['create_logs'];
+
+		// fields for the template
+		$data['html_inputs'] = $params;
 		
         // data for the template
-		$data['payment_api']        = $settings['payment_api'];
 		$data['sc_test_env']        = $settings['test'];
         
         // texts
@@ -471,17 +258,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         SC_LOGGER::create_log('success page');
         
         $this->load->model('checkout/order');
-    //    SC_LOGGER::create_log($this->session->data, 'success, session.');
-    //    SC_LOGGER::create_log($_REQUEST, 'success, $_REQUEST.');
-        
-        # P3D case 1 - response form issuer/bank
-        if(
-            isset($this->session->data['SC_P3D_Params'], $_REQUEST['PaRes'])
-            && is_array($this->session->data['SC_P3D_Params'])
-            && !empty($_REQUEST['PaRes'])
-        ) {
-            $this->pay_with_d3d_p3d();
-        }
         
         $arr = explode("_", @$_REQUEST['invoice_id']);
 		$order_id  = $arr[0];
@@ -553,35 +329,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             SC_LOGGER::create_log('', 'A sale/auth.');
             $order_id = 0;
             
-            // Cashier
-            if(!empty($_REQUEST['invoice_id'])) {
-                SC_LOGGER::create_log('', 'Cashier sale.');
-                
-                try {
-                    $arr = explode("_", $_REQUEST['invoice_id']);
-                    $order_id  = intval($arr[0]);
-                }
-                catch (Exception $ex) {
-                    SC_LOGGER::create_log($ex->getMessage(), 'Cashier DMN Exception when try to get Order ID: ');
-                    echo 'DMN Exception: ' . $ex->getMessage();
-                    exit;
-                }
-            }
-            // REST
-            else {
                 SC_LOGGER::create_log('REST sale.');
                 
-                try {
-                    $order_id = intval($_REQUEST['merchant_unique_id']);
-                }
-                catch (Exception $ex) {
-                    SC_LOGGER::create_log($ex->getMessage(), 'REST DMN Exception when try to get Order ID: ');
-                    echo 'DMN Exception: ' . $ex->getMessage();
-                    exit;
-                }
-            }
-            
-            try {
+			try {
+				$order_id = intval(@$_REQUEST['merchant_unique_id']);
                 $order_info = $this->model_checkout_order->getOrder($order_id);
                 
                 $this->update_custom_payment_fields($order_id);
@@ -788,42 +539,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                     . $params['amount'] . $params['currency'] . $TimeStamp . $secret
             );
             
-            // in case of UPO
-            if(is_numeric(@$post['payment_method_sc'])) {
-                $params['userPaymentOption'] = array(
-                    'userPaymentOptionId' => $post['payment_method_sc'],
-                    'CVV' => $post['upo_cvv_field_' . $post['payment_method_sc']],
-                );
-                
-                $params['isDynamic3D'] = 1;
-                $endpoint_url = $test_mode == 'no' ? SC_LIVE_D3D_URL : SC_TEST_D3D_URL;
-            }
-            // in case of Card
-            elseif(in_array(@$post['payment_method_sc'], array('cc_card', 'dc_card'))) {
-                if(isset($post[$post['payment_method_sc']]['ccTempToken'])) {
-                    $params['cardData']['ccTempToken'] = $post[$post['payment_method_sc']]['ccTempToken'];
-                }
-                
-                if(isset($post[$post['payment_method_sc']]['CVV'])) {
-                    $params['cardData']['CVV'] = $post[$post['payment_method_sc']]['CVV'];
-                }
-                
-                if(isset($post[$post['payment_method_sc']]['cardHolderName'])) {
-                    $params['cardData']['cardHolderName'] = $post[$post['payment_method_sc']]['cardHolderName'];
-                }
+			$endpoint_url = $test_mode == 'no' ? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
+			$params['paymentMethod'] = $post['payment_method_sc'];
 
-                $params['isDynamic3D'] = 1;
-                $endpoint_url = $test_mode == 'no' ? SC_LIVE_D3D_URL : SC_TEST_D3D_URL;
-            }
-            // in case of APM
-            elseif(@$post['payment_method_sc']) {
-                $endpoint_url = $test_mode == 'no' ? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
-                $params['paymentMethod'] = $post['payment_method_sc'];
-                
-                if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
-                    $params['userAccountDetails'] = $_POST[$_POST['payment_method_sc']];
-                }
-            }
+			if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
+				$params['userAccountDetails'] = $_POST[$_POST['payment_method_sc']];
+			}
             
             $resp = SC_REST_API::call_rest_api($endpoint_url, $params);
             
@@ -854,57 +575,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             }
             
             if($this->get_request_status($resp) == 'SUCCESS') {
-                # The case with D3D and P3D
-                // isDynamic3D is hardcoded to be 1, see SC_REST_API line 509
-                // for the three cases see: https://www.safecharge.com/docs/API/?json#dynamic3D,
-                // Possible Scenarios for Dynamic 3D (isDynamic3D = 1)
-                
-                // clear the old session data
-                if(isset($this->session->data['SC_P3D_Params'])) {
-                    unset($this->session->data['SC_P3D_Params']);
-                }
-                
-                // prepare the new session data
-                if(isset($params['userPaymentOption']) || isset($params['cardData'])) {
-                    $params_p3d = $params;
-                    
-                    $params_p3d['orderId']          = $resp['orderId'];
-                    $params_p3d['transactionType']  = @$resp['transactionType'];
-                    $params_p3d['paResponse']       = '';
-                    
-                    $this->session->data['SC_P3D_Params'] = $params_p3d;
-                    
-                    // case 1
-                    if(
-                        isset($resp['acsUrl'], $resp['threeDFlow'])
-                        && !empty($resp['acsUrl'])
-                        && intval($resp['threeDFlow']) == 1
-                    ) {
-                        SC_LOGGER::create_log('D3D case 1');
-                        SC_LOGGER::create_log($resp['acsUrl'], 'acsUrl: ');
-                    
-                        // step 1 - go to acsUrl, it will return us to Pending page
-                        $data['acsUrl']     = $resp['acsUrl'];
-                        $data['paRequest']  = $resp['paRequest'];
-                        // it is also pending page
-                        $data['TermUrl']    = $post['success_url'] . '&create_logs=' . @$_REQUEST['create_logs'];
-                        
-                        SC_LOGGER::create_log($data, 'params for acsUrl: ');
-                        
-                        // step 2 - wait for the DMN
-                    }
-                    // case 2
-                    elseif(isset($resp['threeDFlow']) && intval($resp['threeDFlow']) == 1) {
-                        SC_LOGGER::create_log('process_payment() D3D case 2.');
-                        $this->pay_with_d3d_p3d(@$params['webMasterId']); // we exit there
-                    }
-                    // case 3 do nothing
-                }
-                // The case with D3D and P3D END
                 // in case we have redirectURL
-                elseif(isset($resp['redirectURL']) && !empty($resp['redirectURL'])) {
-                    $data['redirectURL'] = $resp['redirectURL'];
-                    $data['pendingURL'] = $post['success_url'];
+                if(isset($resp['redirectURL']) && !empty($resp['redirectURL'])) {
+					$this->response->redirect($data['redirectURL']);
                 }
             }
             
@@ -932,95 +605,13 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                     true
                 );
             }
-            
-            $data['header']         = $this->load->controller('common/header');
-            $data['footer']         = $this->load->controller('common/footer');
-            $data['column_left']    = $this->load->controller('common/column_left');
-            $data['success_url']    = $post['success_url'];
-
-            // load common php template and then pass it to the real template
-            // as single variable. The form is same for both versions
-            $curr_tpl = str_replace('safecharge', 'process_payment', $ctr_file_path);
-
-            ob_start();
-            require DIR_TEMPLATE . 'default/template/' . $curr_tpl . '.php';
-            $sc_form['sc_form'] = ob_get_clean(); // the template of OC wants array
-
-            $this->response->setOutput($this->load->view(
-                $curr_tpl . SafeChargeVersionResolver::get_tpl_extension(),
-                $sc_form
-            ));
+			
+			$this->response->redirect($data['success_url']);
         }
         catch (Exception $ex) {
             SC_LOGGER::create_log($ex->getMessage(), 'process_payment Exception: ');
             $this->response->redirect($post['error_url']);
         }
-    }
-    
-    /**
-     * Function pay_with_d3d_p3d
-     * After we get the DMN form the issuer/bank call this method to continue the flow.
-     */
-    public function pay_with_d3d_p3d()
-    {
-        SC_LOGGER::create_log('pay_with_d3d_p3d');
-        
-        $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
-        $p3d_resp = false;
-        
-        if(isset($_REQUEST['PaRes'])) {
-            $this->session->data['SC_P3D_Params']['paResponse'] = $_REQUEST['PaRes'];
-        }
-        
-        try {
-            $this->load->model('checkout/order');
-            $order_info = $this->model_checkout_order->getOrder($this->session->data['SC_P3D_Params']['clientUniqueId']);
-
-            $sc_P3D_Params = $this->session->data['SC_P3D_Params'];
-            $sc_P3D_Params['transactionType'] = $this->config->get($settigs_prefix . 'transaction_type');
-//            $sc_P3D_Params['urlDetails']['notificationUrl'] =
-//                $sc_P3D_Params['urlDetails']['notificationUrl']['notificationUrl'];
-            
-            // load help files
-            require_once DIR_SYSTEM . 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR . 'SC_REST_API.php';
-
-            $p3d_resp = SC_REST_API::call_rest_api(
-                $this->config->get($settigs_prefix . 'test_mode') == 'yes' ? SC_TEST_P3D_URL : SC_LIVE_P3D_URL
-                ,$sc_P3D_Params
-                ,$sc_P3D_Params['checksum']
-            );
-        }
-        catch (Exception $ex) {
-            SC_LOGGER::create_log($ex->getMessage(), 'P3D fail Exception: ');
-            $this->response->redirect($this->url->link('checkout/failure'));
-        }
-        
-        SC_LOGGER::create_log($p3d_resp, 'D3D / P3D, REST API Call response: ');
-
-        if(!$p3d_resp) {
-            if($order_info['order_status_id'] == $this->config->get($settigs_prefix . 'pending_status_id')) {
-                $this->change_order_status(
-                    intval($this->session->data['SC_P3D_Params']['clientUniqueId']),
-                    'FAIL',
-                    $this->config->get($settigs_prefix . 'transaction_type')
-                );
-            }
-            else {
-                $this->model_checkout_order->addOrderHistory(
-                    $this->session->data['SC_P3D_Params']['clientUniqueId'],
-                    $order_info['order_status_id'],
-                    'Payment 3D API response fails.',
-                    true
-                );
-            }
-
-            SC_LOGGER::create_log('Payment 3D API response fails.');
-            $this->response->redirect($this->url->link('checkout/failure'));
-        }
-
-        $this->response->redirect($this->url->link('checkout/success'));
-        exit;
-        // now wait for the DMN
     }
     
     /**

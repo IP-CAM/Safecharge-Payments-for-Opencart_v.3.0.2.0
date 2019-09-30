@@ -143,39 +143,6 @@
         <a href="javascript:void(0);" class="close" onclick="$(this).parent('div').addClass('hide');" aria-label="close" title="close">&times;</a>
     </div>
     
-    <?php if(isset($data['upos']) && $data['upos']): ?>
-        <h3 class="required"><?= $data['sc_upos_title']; ?>:</h3>
-        
-        <ul id="sc_upos_list" class="nav">
-            <?php foreach($data['upos'] as $upo): ?>
-                <li class="dropdown apm_container">
-                    <div class="apm_title">
-                        <?php if(isset($upo['upoData']['brand'], $data['icons'][$upo['upoData']['brand']])): ?>
-                            <img src="<?= str_replace('/svg/', '/svg/solid-white/', $data['icons'][$upo['upoData']['brand']]) ?>" />
-                            <?php if(isset($upo['upoData']['ccCardNumber'])): ?>
-                                &nbsp;&nbsp;<span><?= $upo['upoData']['ccCardNumber']; ?></span>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <img src="<?php str_replace('/svg/', '/svg/solid-white/', $data['icons'][$upo['paymentMethodName']]) ?>" />
-                        <?php endif; ?>
-                        
-                        <input type="radio" class="hide" name="payment_method_sc" value="<?= $upo['userPaymentOptionId'] ?>" />
-                        <i class="fa fa-check hide" aria-hidden="true"></i>
-                    </div>
-                    
-                    <?php if(in_array($upo['paymentMethodName'], array("cc_card", "dc_card"))): ?>
-                        <div class="apm_fields">
-                            <div class="apm_field">
-                                <input id="upo_cvv_field_<?= $upo['userPaymentOptionId'] ?>" class="upo_cvv_field" name="upo_cvv_field_<?= $upo['userPaymentOptionId'] ?>" type="text" pattern="^[0-9]{3,4}$" placeholder="CVV Number">
-                            </div>
-                        </div>
-                    <?php endif; ?>
-                </li>
-            <?php endforeach; ?>
-        </ul>
-        <br/>
-    <?php endif; ?>
-        
     <?php if(isset($data['payment_methods']) && $data['payment_methods']): ?>
         <h3 class="required"><?= $data['sc_pms_title']; ?></h3>
         
@@ -227,7 +194,7 @@
                 </li>
             <?php endforeach; ?>
         </ul>
-    <?php elseif($data['payment_api'] == "rest"): ?>
+    <?php else: ?>
         <div class="alert alert-danger hide"><?= $data['rest_no_apms_error']; ?></div>
     <?php endif;?> 
         
@@ -237,19 +204,12 @@
         
     <div class="buttons">
         <div class="pull-right">
-            <?php if($data['payment_api'] == "cashier"): ?>
-                <button type="submit" class="btn btn-primary"><?= $data['button_confirm']; ?></button>
-            <?php else: ?>
-                <button id="sc_validate_submit_btn" type="button" class="btn btn-primary" onclick="scValidateAPMFields()"><?= $data['button_confirm']; ?></button>
-            <?php endif; ?>
+			<button id="sc_validate_submit_btn" type="button" class="btn btn-primary" onclick="scValidateAPMFields()"><?= $data['button_confirm']; ?></button>
         </div>
     </div>
 </form>
 
 <script type="text/javascript">
-    paymentAPI = "<?= @$data['payment_api']; ?>";
-    payloadURL = "<?= @$data['payload_url']; ?>";
-    
     var scLocale = "<?= $data['scLocale'] ?>";
     var scData = {
         merchantSiteId: "<?= $data['merchantSiteId']; ?>"
