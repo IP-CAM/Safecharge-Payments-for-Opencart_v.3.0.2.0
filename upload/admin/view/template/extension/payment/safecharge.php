@@ -96,17 +96,6 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="col-sm-2 control-label"><?= $data['entry_payment_api']; ?></label>
-                    
-                    <div class="col-sm-10">
-                        <select class="form-control" name="<?= $settigs_prefix; ?>payment_api">
-                            <option value="cashier" <?php if (@$data[$settigs_prefix . 'payment_api'] == "cashier"): ?>selected="selected"<?php endif; ?>><?= $data['entry_option_cashier']; ?></option>
-                            <option value="rest" <?php if (@$data[$settigs_prefix . 'payment_api'] == "rest"): ?>selected="selected"<?php endif; ?>><?= $data['entry_option_rest']; ?></option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-group">
                     <label class="col-sm-2 control-label"><?= $data['entry_transaction_type']; ?></label>
                     
                     <div class="col-sm-10">

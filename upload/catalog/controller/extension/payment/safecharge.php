@@ -1377,24 +1377,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 
             $payment_custom_fields = $query->row['payment_custom_field'];
 
-<<<<<<< HEAD
-            if(is_array($data)) {
-                if(isset($data['cardData']) && is_array($data['cardData'])) {
-                    foreach($data['cardData'] as $k => $v) {
-                        $data['cardData'][$k] = 'some string';
-                    }
-                }
-                if(isset($data['userAccountDetails']) && is_array($data['userAccountDetails'])) {
-                    foreach($data['userAccountDetails'] as $k => $v) {
-                        $data['userAccountDetails'][$k] = 'some string';
-                    }
-                }
-                if(isset($data['paResponse']) && !empty($data['paResponse'])) {
-                    $data['paResponse'] = 'a long string';
-                }
-                if(isset($data['PaRes']) && !empty($data['PaRes'])) {
-                    $data['PaRes'] = 'a long string';
-=======
             // get the fields as array
             if($payment_custom_fields && is_string($payment_custom_fields)) {
                 $payment_custom_fields = json_decode($payment_custom_fields, true);
@@ -1409,10 +1391,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 
                 if(isset($_REQUEST['payment_method']) && $_REQUEST['payment_method']) {
                     $data['_paymentMethod'] = $_REQUEST['payment_method'];
->>>>>>> v1.1
                 }
-                
-                $d = print_r($data, true);
             }
 
             if($overwrite) {

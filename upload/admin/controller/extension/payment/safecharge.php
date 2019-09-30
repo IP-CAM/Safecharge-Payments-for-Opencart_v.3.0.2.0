@@ -168,7 +168,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         $data['breadcrumbs'][] = array(
             'text' => $data['heading_title'],
 			'href' => $this->url->link(
-            //    $ctr_file_path,
                 $this->request->get['route'],
                 $token_name . '=' . $this->session->data[$token_name],
                 true
@@ -177,7 +176,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
    		);
 
 		$data['action'] = $this->url->link(
-        //    $ctr_file_path,
             $this->request->get['route'],
             $token_name . '=' . $this->session->data[$token_name],
             true
@@ -195,7 +193,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'ppp_Merchant_Site_ID',
             'secret',
             'hash_type',
-            'payment_api',
             'transaction_type',
             'test_mode',
             'force_http',
@@ -644,7 +641,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'hash_type'         => $gw_settings[$settigs_prefix . 'hash_type'],
             'secret'            => $gw_settings[$settigs_prefix . 'secret'],
             'force_http'        => $gw_settings[$settigs_prefix . 'force_http'],
-            'payment_api'       => $gw_settings[$settigs_prefix . 'payment_api'],
             'transactionType'   => $gw_settings[$settigs_prefix . 'transaction_type'],
         );
     }
@@ -686,60 +682,4 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         exit;
     }
     
-<<<<<<< HEAD
-    /**
-     * Function create_log
-     * Create logs. You MUST have defined SC_LOG_FILE_PATH const,
-     * holding the full path to the log file.
-     * 
-     * @param mixed $data
-     * @param string $title - title of the printed log
-     */
-    private function create_log($data, $title = '')
-    {
-        if(
-            @$this->config->get('create_logs') == 'yes' 
-            || @$this->session->data['create_logs'] == 'yes' 
-            || @$_REQUEST['create_logs'] == 'yes'
-        ) {
-            $d = $data;
-
-            if(is_array($data)) {
-                if(isset($data['cardData']) && is_array($data['cardData'])) {
-                    foreach($data['cardData'] as $k => $v) {
-                        $data['cardData'][$k] = 'some string';
-                    }
-                }
-                if(isset($data['userAccountDetails']) && is_array($data['userAccountDetails'])) {
-                    foreach($data['userAccountDetails'] as $k => $v) {
-                        $data['userAccountDetails'][$k] = 'some string';
-                    }
-                }
-                if(isset($data['paResponse']) && !empty($data['paResponse'])) {
-                    $data['paResponse'] = 'a long string';
-                }
-                if(isset($data['PaRes']) && !empty($data['PaRes'])) {
-                    $data['PaRes'] = 'a long string';
-                }
-                
-                $d = print_r($data, true);
-            }
-            elseif(is_object($data)) {
-                $d = print_r($data, true);
-            }
-            elseif(is_bool($data)) {
-                $d = $data ? 'true' : 'false';
-            }
-
-            if(!empty($title)) {
-                $d = $title . "\r\n" . $d;
-            }
-
-            // FOR OpenCart ONLY
-            $logger = new Log('SafeCharge-' . date('Y-m-d', time()) . '.log');
-            $logger->write($d . "\n");
-        }
-    }
-=======
->>>>>>> v1.1
 }
