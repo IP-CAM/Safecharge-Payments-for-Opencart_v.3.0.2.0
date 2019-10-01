@@ -2,7 +2,7 @@
 <modification>
     <name>SC Modification</name>
     <code>SafeCharge</code>
-    <version>1.1</version>
+    <version>1.2</version>
     <author>SafeCharge</author>
     <link>https://www.safecharge.com/</link>
     
@@ -13,7 +13,8 @@
                 $data['scripts'] = $this->document->getScripts('header');
             ]]></search>
             <add position="before"><![CDATA[
-                $this->document->addScript('https://dev-mobile.safecharge.com/cdn/WebSdk/dist/safecharge.js');
+                $this->document->addScript('https://cdn-int.safecharge.com/safecharge_resources/v1/websdk/safecharge.js'); // prod
+                //$this->document->addScript('https://dev-mobile.safecharge.com/cdn/WebSdk/dist/safecharge.js'); // test
             ]]></add>
         </operation>
     </file>

@@ -5,7 +5,7 @@ if (!session_id()) {
 }
 
 require_once DIR_SYSTEM .'config'. DIRECTORY_SEPARATOR. 'sc_config.php';
-require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_logger.php';
+require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'SC_CLASS.php';
 require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
 
 class ControllerExtensionPaymentSafeCharge extends Controller
@@ -273,7 +273,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     private function ajax_call()
     {
-        SC_LOGGER::create_log($this->request->post['action'], 'ajax_call(): ');
+        SC_CLASS::create_log($this->request->post['action'], 'ajax_call(): ');
         
         try {
             $action = $this->request->post['action'];
@@ -283,13 +283,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             }
         }
         catch (Exception $ex) {
-            SC_LOGGER::create_log($ex->getMessage(), 'In ajax miss orderId or action: ');
+            SC_CLASS::create_log($ex->getMessage(), 'In ajax miss orderId or action: ');
             echo json_encode(array('status' => 0, 'msg' => $ex->getMessage()));
             exit;
         }
-        
-        // load REST API class and config
-        require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'SC_REST_API.php';
         
         switch ($action) {
             case 'refund':
@@ -366,7 +363,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $order_status = 11; // refunded
             }
             
-            SC_LOGGER::create_log($order_status, '$order_status: ');
+            SC_CLASS::create_log($order_status, '$order_status: ');
             
             $this->db->query(
                 "INSERT INTO " . DB_PREFIX ."order_history (order_id, order_status_id, notify, comment, date_added) "
@@ -581,7 +578,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         $params['checksum'] = $checksum;
         
-        SC_LOGGER::create_log($params, 'The params for Void/Settle: ');
+        SC_CLASS::create_log($params, 'The params for Void/Settle: ');
         
         SC_REST_API::void_and_settle_order($params, $this->request->post['action'], true);
     }

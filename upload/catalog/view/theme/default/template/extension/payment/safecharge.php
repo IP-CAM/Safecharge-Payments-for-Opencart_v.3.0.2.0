@@ -85,11 +85,14 @@
         background-color: inherit !important;
         border-bottom: .1rem solid #9B9B9B !important;
         border-radius: 0px !important;
-        padding-bottom: 8px !important;
         padding-left: 0px !important;
         padding-right: 0px !important;
         width: 100%;
     }
+	
+	#safechargesubmit input::placeholder {
+		color: grey;
+	}
 
     #safechargesubmit .apm_error {
         background: none;
@@ -129,10 +132,6 @@
 </style>
 
 <form action="<?= $data['action']; ?>" method="POST" name="safechargesubmit" id="safechargesubmit">
-    <?php foreach($data['html_inputs'] as $name => $value): ?>
-        <input type='hidden' name='<?= $name; ?>' value='<?= $value; ?>'/>
-    <?php endforeach; ?>
-        
     <div id="reload_apms_warning" class="alert alert-danger hide">
         <strong><?= $data['sc_attention']; ?></strong> <?= $data['sc_go_to_step_2_error']; ?>
         <a href="javascript:void(0);" class="close" onclick="$(this).parent('div').addClass('hide');" aria-label="close" title="close">&times;</a>
@@ -155,33 +154,30 @@
                         <i class="fa fa-check hide" aria-hidden="true"></i>
                     </div>
                     
-                    <?php if(in_array($payment_method['paymentMethod'], array('cc_card', 'dc_card', 'paydotcom'))): ?>
+                    <?php if(in_array($payment_method['paymentMethod'], array('cc_card', 'dc_card'))): ?>
                         <div class="apm_fields" id="sc_<?= $payment_method['paymentMethod']; ?>">
                             <div class="apm_field">
-                                <div id="sc_card_number"></div>
+                                <input type="text" 
+									   id="sc_card_holder_name" 
+									   name="<?= $payment_method['paymentMethod']; ?>[cardHolderName]" 
+									   placeholder="Card holder name" />
                             </div>
                             
                             <div class="apm_field">
-                                <input type="text" id="sc_card_holder_name" name="<?= $payment_method['paymentMethod']; ?>[cardHolderName]" placeholder="Card holder name" />
+                                <div id="card-field-placeholder"></div>
                             </div>
-                            
-                            <div class="apm_field">
-                                <div id="sc_card_expiry"></div>
-                            </div>
-                            
-                            <div class="apm_field">
-                                <div id="sc_card_cvc"></div>
-                            </div>
-                            
-                            <input type="hidden" id="<?= $payment_method['paymentMethod']; ?>_ccTempToken" name="<?= $payment_method['paymentMethod']; ?>[ccTempToken]" />
                         </div>
                     <?php elseif(count($payment_method['fields']) > 0): ?>
                         <div class="apm_fields">
                             <?php foreach($payment_method['fields'] as $p_field): ?>
                                 <div class="apm_field">
-                                    <input id="<?= $payment_method['paymentMethod']; ?>_<?= $p_field['name']; ?>" name="<?= $payment_method['paymentMethod']; ?>[<?= $p_field['name']; ?>]" type="<?= $p_field['type']; ?>" <?php if(isset($p_field['regex']) && !empty($p_field['regex'])): ?>pattern="<?= $p_field['regex'] ?>"<?php endif; ?> placeholder="<?= @$p_field['caption'][0]['message']; ?>" />
+                                    <input id="<?= $payment_method['paymentMethod']; ?>_<?= $p_field['name']; ?>" 
+										   name="<?= $payment_method['paymentMethod']; ?>[<?= $p_field['name']; ?>]" 
+										   type="<?= $p_field['type']; ?>" 
+										   <?php if(!empty($p_field['regex'])): ?>pattern="<?= $p_field['regex'] ?>"<?php endif; ?> 
+										   <?php if(!empty($p_field['caption'][0]['message'])): ?>placeholder="<?= @$p_field['caption'][0]['message']; ?>"<?php else: ?>placeholder="<?= @$p_field['name']; ?>"<?php endif; ?> />
 
-                                    <?php if(isset($p_field['regex']) && !empty($p_field['regex'])): ?>
+                                    <?php if(!empty($p_field['regex']) && !empty($p_field['validationmessage'][0]['message'])): ?>
                                         <i class="fa fa-question-circle-o" onclick="showErrorLikeInfo('sc_<?= $p_field['name']; ?>')" aria-hidden="true"></i>
                                         <div class="apm_error hide" id="error_sc_<?= $p_field['name']; ?>">
                                             <label><?= $p_field['validationmessage'][0]['message']; ?></label>
@@ -198,9 +194,8 @@
         <div class="alert alert-danger hide"><?= $data['rest_no_apms_error']; ?></div>
     <?php endif;?> 
         
-    <?php if(isset($data['sessionToken']) && $data['sessionToken']): ?>
-        <input type="hidden" name="lst" id="sc_lst" value="<?= $data['sessionToken']; ?>" />
-    <?php endif; ?>
+	<input type="hidden" name="lst" id="sc_lst" value="<?= @$data['sessionToken']; ?>" />
+	<input type="hidden" name="sc_transaction_id" id="sc_transaction_id" value="" />
         
     <div class="buttons">
         <div class="pull-right">
@@ -210,27 +205,239 @@
 </form>
 
 <script type="text/javascript">
-    var scLocale = "<?= $data['scLocale'] ?>";
     var scData = {
-        merchantSiteId: "<?= $data['merchantSiteId']; ?>"
-        ,sessionToken: "<?= $data['sessionToken'] ?>"
+        merchantSiteId	: "<?= $data['merchantSiteId']; ?>",
+        merchantId		: "<?= $data['merchantId']; ?>",
+        sessionToken	: "<?= @$data['sessionToken'] ?>",
     };
     
     <?php if(@$data['sc_test_env'] == 'yes'): ?>
         scData.env = 'test';
     <?php endif; ?>
     
-    var scTestEnv           = "<?= @$data['sc_test_env']; ?>";
-    var scBtnConfirmText    = "<?= @$data['button_confirm']; ?>";
-    var scBtnLoadingText    = "<?= @$data['sc_btn_loading']; ?>";
-    var scTokenError        = "<?= @$data['sc_token_error']; ?>";
-    var scTokenError2       = "<?= @$data['sc_token_error_2']; ?>";
-    
-    // for the fields
-    var sfc                 = null;
-    var sfcFirstField       = null;
-    
-    
+	var scCard				= null;
+	var sfc					= null;
+	var selectedPM          = '';
+
+	/**
+	 * Function createSCFields
+	 * Call SafeCharge method and pass the parameters
+	 */
+	function createSCFields() {
+		sfc = SafeCharge(scData);
+
+		// prepare fields
+		var fields = sfc.fields({
+			locale: "<?= $data['scLocale'] ?>"
+		});
+
+		// set some classes
+		var elementClasses = {
+			focus: 'focus'
+			,empty: 'empty'
+			,invalid: 'invalid'
+		};
+		
+		scCard = fields.create('card', {
+            iconStyle: 'solid',
+            style: {
+                base: {
+                    iconColor: "#c4f0ff",
+                    color: "#000",
+                    fontWeight: 500,
+                    fontFamily: "Open Sans, sans-serif, Roboto, Segoe UI",
+                    fontSize: '12px',
+                    fontSmoothing: "antialiased",
+                    ":-webkit-autofill": {
+                        color: "#fce883"
+                    },
+                    "::placeholder": {
+                        color: "grey" 
+                    }
+                },
+                invalid: {
+                    iconColor: "#FFC7EE",
+                    color: "#FFC7EE"
+                }
+            },
+            classes: elementClasses
+        });
+
+        scCard.attach('#card-field-placeholder');
+	}
+
+	/**
+	  * Function showErrorLikeInfo
+	  * Show error message as information about the field.
+	  * 
+	  * @param {int} elemId
+	  */
+	 function showErrorLikeInfo(elemId) {
+		$('#error_'+elemId).addClass('error_info');
+
+		if($('#error_'+elemId).hasClass('hide')) {
+			$('#error_'+elemId).removeClass('hide');
+		}
+		else {
+			$('#error_'+elemId).addClass('hide');
+		}
+	 }
+
+	/**
+	  * Function validateScAPMsModal
+	  * When click save on modal, check for mandatory fields and validate them.
+	  */
+	function scValidateAPMFields() {
+		// show Loading... button
+		$('#sc_validate_submit_btn')
+			.prop('disabled', true)
+			.val("<?= @$data['sc_btn_loading']; ?>");
+
+		var formValid = true;
+
+		if(typeof selectedPM != 'undefined' && selectedPM != '') {
+			// create payment with WebSDK
+			if(selectedPM == 'cc_card' || selectedPM == 'dc_card') {
+                sfc.createPayment({
+                    sessionToken    : "<?= @$data['sessionToken'] ?>",
+                    merchantId      : "<?= @$data['merchantId'] ?>",
+                    merchantSiteId  : "<?= @$data['merchantSiteId'] ?>",
+                    currency        : "<?= @$data['currency'] ?>",
+                    amount          : "<?= @$data['amount'] ?>",
+                    cardHolderName  : document.getElementById('sc_card_holder_name').value,
+                    paymentOption   : scCard
+                }, function(resp){
+                    console.log(resp);
+
+                    if(typeof resp.result != 'undefined') {
+                        if(resp.result == 'APPROVED' && resp.transactionId != 'undefined') {
+							$('#sc_transaction_id').val(resp.transactionId);
+                            $('form#safechargesubmit').submit();
+                            return;
+                        }
+                        else if(resp.result == 'DECLINED') {
+                            alert("<?= $data['sc_order_declined']; ?>");
+							
+							$('#sc_validate_submit_btn')
+								.prop('disabled', false)
+								.val("<?= @$data['button_confirm']; ?>");
+                        }
+                        else {
+                            if(resp.errorDescription != 'undefined' && resp.errorDescription != '') {
+                                alert(resp.errorDescription);
+                            }
+                            else if('undefined' != resp.reason && '' != resp.reason) {
+                                alert(resp.reason);
+                            }
+                            else {
+                                alert("<?= $data['sc_order_error']; ?>");
+                            }
+							
+							$('#sc_validate_submit_btn')
+								.prop('disabled', false)
+								.val("<?= @$data['button_confirm']; ?>");
+                        }
+                    }
+                    else {
+                        alert("<?= $data['sc_order_error']; ?>");
+                        console.error('Error with SDK response: ' + resp);
+						
+						$('#sc_validate_submit_btn')
+							.prop('disabled', false)
+							.val("<?= @$data['button_confirm']; ?>");
+                    }
+                });
+			}
+			// use APM data
+			else if(isNaN(parseInt(selectedPM))) {
+				var checkId = 'sc_payment_method_' + selectedPM;
+
+				// iterate over payment fields
+				$('#' + checkId).closest('li.apm_container').find('.apm_fields input').each(function(){
+					var apmField = $(this);
+
+					if (
+						typeof apmField.attr('pattern') != 'undefined'
+						&& apmField.attr('pattern') !== false
+						&& apmField.attr('pattern') != ''
+					) {
+						var regex = new RegExp(apmField.attr('pattern'), "i");
+
+						// SHOW error
+						if(apmField.val() == '' || regex.test(apmField.val()) == false) {
+							apmField.parent('.apm_field').find('.apm_error')
+								.removeClass('error_info hide');
+
+							formValid = false;
+						}
+						else {
+							apmField.parent('.apm_field').find('.apm_error')
+								.addClass('hide');
+						}
+					}
+					else if(apmField.val() == '') {
+						formValid = false;
+					}
+				});
+
+				if(!formValid) {
+					scFormFalse();
+					return;
+				}
+
+				$('form#safechargesubmit').submit();
+			}
+		}
+		else {
+			scFormFalse();
+			return;
+		}
+	}
+
+	function scFormFalse() {
+		$('#sc_pm_error').removeClass('hide');
+		window.location.hash = 'sc_pm_error';
+		window.location.hash;
+
+		$('#sc_validate_submit_btn')
+			.prop('disabled', false)
+			.val("<?= @$data['button_confirm']; ?>");
+	}
+
+	$(function() {
+		createSCFields();
+
+		// when click on APM payment method
+		$('body').on('click', 'form#safechargesubmit .apm_title', function() {
+			var self = $(this);
+			// check current radio
+			var currRadio = self.find('input');
+			currRadio.prop('checked', true);
+
+			selectedPM = currRadio.val();
+
+			// hide all check marks 
+			$('#safechargesubmit').find('.apm_title i').addClass('hide');
+
+			// mark current payment method
+			self.find('i').removeClass('hide');
+
+			// hide all apm_fields
+			$('#safechargesubmit .apm_fields').fadeOut("slow")
+				.promise()
+				.done(function(){
+					// show current apm_fields
+					self.parent('.apm_container').find('.apm_fields').toggle('slow');
+				});
+		});
+
+		// when change Payment Country and not click on Continue button show warning!
+		$('#collapse-payment-address').on('change', '#input-payment-country', function(){
+			$('#reload_apms_warning').removeClass('hide');
+		});
+
+	});
+	// document ready function END
 </script>
 
-<script type="text/javascript" src="catalog/view/javascript/sc.js"></script>
+<!--<script type="text/javascript" src="catalog/view/javascript/sc.js"></script>-->

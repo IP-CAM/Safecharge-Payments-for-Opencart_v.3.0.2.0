@@ -5,31 +5,31 @@ if (!session_id()) {
 }
 
 require_once DIR_SYSTEM. 'config'. DIRECTORY_SEPARATOR. 'sc_config.php';
-require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_logger.php';
+require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'SC_CLASS.php';
 require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
 
 class ControllerExtensionPaymentSafeCharge extends Controller
 {
+	private $order_info;
+	
 	public function index()
     {
         $this->load->model('checkout/order');
 		$this->load->model('account/reward');
-        
+		
         $ctr_file_path = $ctr_url_path = SafeChargeVersionResolver::get_ctr_file_path();
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
 		
         $this->language->load($ctr_file_path);
-        $order_time = date('YmdHis', time());
         
 		# get GW settings to call REST API later
 		$settings['secret_key']         = $this->config->get($settigs_prefix . 'secret');
-		$settings['merchant_id']        = $this->config->get($settigs_prefix . 'ppp_Merchant_ID');
-		$settings['merchantsite_id']    = $this->config->get($settigs_prefix . 'ppp_Merchant_Site_ID');
-		$settings['currencyCode']       = $this->session->data['currency'];
-		$settings['languageCode']       = current(explode('-', $this->session->data['language']));
-		$settings['sc_country']         = $this->session->data['payment_address']['iso_code_2'];
-		$settings['transaction_type']   = $this->config->get($settigs_prefix . 'transaction_type');
-		$settings['test']               = $this->config->get($settigs_prefix . 'test_mode');
+		$settings['merchant_id']        = $data['merchantId']
+										= $this->config->get($settigs_prefix . 'ppp_Merchant_ID');
+		$settings['merchantsite_id']    = $data['merchantSiteId']
+										= $this->config->get($settigs_prefix . 'ppp_Merchant_Site_ID');
+		$settings['test']               = $data['sc_test_env']
+										= $this->config->get($settigs_prefix . 'test_mode');
 		$settings['hash_type']          = $this->config->get($settigs_prefix . 'hash_type');
 		$settings['force_http']         = $this->config->get($settigs_prefix . 'force_http');
 		$settings['create_logs']        = $this->session->data['create_logs']
@@ -37,72 +37,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                                         = $this->config->get($settigs_prefix . 'create_logs');
         # get GW settings to call REST API later END
         
-        $countriesWithStates = array('US', 'IN', 'CA');
         // get order data
         $order_info = $this->model_checkout_order->getOrder($this->session->data['order_id']);
-        
-        // coupon
-        $coupon = array();
-        if (isset($this->session->data['coupon'])) {
-            $coupon = $this->model_extension_total_coupon
-                ->getCoupon($this->session->data['coupon']);
-        }
-        
-        $prods = $this->cart->getProducts(); // get the products
-        $tax_id = false;
-        
-        // array with data for the Order
-        $params = array();
-        
-        $params['numberofitems']    = 1;
-        $params['handling']         = '0.00';
-        $params['total_tax']        = '0.00'; // taxes
-        $params['merchant_id']      = $settings['merchant_id'];
-		$params['merchant_site_id'] = $settings['merchantsite_id'];
-		$params['time_stamp']       = $order_time;
-		$params['encoding']         = 'utf-8';
-		$params['version']          = '4.0.0';
-        
-        $params['success_url']      = $this->url->link($ctr_url_path . '/success');
-		$params['pending_url']      = $this->url->link($ctr_url_path . '/success');
-		$params['error_url']        = $this->url->link($ctr_url_path . '/fail');
-		$params['back_url']         = $this->url->link('checkout/checkout', '', true);
 		
-        $params['notify_url']       = $this->url->link($ctr_url_path . '/callback&create_logs=' . $settings['create_logs']);
-        if($settings['force_http'] == 'yes') {
-            $params['notify_url'] = str_replace('https://', 'http://', $params['notify_url']);
-        }
-        
-        $params['invoice_id']           = $this->session->data['order_id'].'_'.date('YmdHis', time());
-		$params['merchant_unique_id']   = $this->session->data['order_id'];
-
-        $params['first_name']   = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_firstname']));
-        $params['last_name']    = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_lastname']));
-        $params['address1']     = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_address_1']));
-        $params['address2']     = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_address_2']));
-        $params['zip']          = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_postcode']));
-        $params['city']         = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_city']));
-        
-        $params['state']        = urlencode(preg_replace("/[[:punct:]]/", '', substr($order_info['payment_zone'], 0, 2)));
-        if (in_array($order_info['payment_iso_code_2'], $countriesWithStates)) {
-			$params['state']    = $order_info['payment_zone_code'];
-		}
-		
-        $params['country']          = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_iso_code_2']));
-        $params['phone1']           = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['telephone']));
-		$params['email']            = $order_info['email'];
-        $params['user_token_id']    = $params['email'];
-        
-        $params['shippingFirstName']    = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['shipping_firstname']));
-        $params['shippingLastName']     = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['shipping_lastname']));
-        $params['shippingAddress']      = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['shipping_address_1']));
-        $params['shippingCity']         = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['shipping_city']));
-        $params['shippingCountry']      = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['shipping_iso_code_2']));
-        $params['shippingZip']          = urlencode(preg_replace("/[[:punct:]]/", '', $order_info['shipping_postcode']));
-        
-        $params['user_token']       = 'auto';
-        $params['payment_method']   = ''; // fill it for the REST API
-        
         $total_amount = $this->currency->format(
             $order_info['total'],
             $order_info['currency_code'],
@@ -111,54 +48,93 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         );
         
         if($total_amount < 0) {
-            $params['total_amount'] = number_format(0, 2, '.', '');
+            $total_amount = number_format(0, 2, '.', '');
         }
         else {
-            $params['total_amount'] = number_format($total_amount, 2, '.', '');
+            $total_amount = number_format($total_amount, 2, '.', '');
         }
         
-        $params['currency']         = $order_info['currency_code'];
-        $params['merchantLocale']   = $this->get_locale();
-        $params['webMasterId']      = 'OpenCart ' . VERSION;
-        
-		require_once DIR_SYSTEM . 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR . 'SC_REST_API.php';
+		$params['total_amount']		= number_format($total_amount, 2, '.', '');
 
-		$settings['merchantId'] = $settings['merchant_id'];
-		$data['merchantSiteId'] = $settings['merchantSiteId'] = $settings['merchantsite_id'];
+		# Open Order
+		$time = date('YmdHis');
+		
+		$oo_endpoint_url = 'yes' == $settings['test']
+			? SC_TEST_OPEN_ORDER_URL : SC_LIVE_OPEN_ORDER_URL;
 
-		// for the REST set one combined item only
-		$params['items[0][name]']      = $this->session->data['order_id'];
-		$params['items[0][price]']     = $params['total_amount'];
-		$params['items[0][quantity]']  = 1;
+		$oo_params = array(
+			'merchantId'        => $settings['merchant_id'],
+			'merchantSiteId'    => $settings['merchantsite_id'],
+			'clientRequestId'   => $time . '_' . uniqid(),
+			'amount'            => $total_amount,
+			'currency'          => $order_info['currency_code'],
+			'timeStamp'         => $time,
+			'urlDetails'        => array(
+				'successUrl'        => $this->url->link($ctr_url_path . '/success'),
+				'failureUrl'        => $this->url->link($ctr_url_path . '/fail'),
+				'pendingUrl'        => $this->url->link($ctr_url_path . '/success'),
+				'backUrl'			=> $this->url->link('checkout/checkout', '', true),
+				'notificationUrl'   => $this->url->link($ctr_url_path . '/callback&create_logs=' . $settings['create_logs']),
+			),
+			'deviceDetails'     => SC_CLASS::get_device_details(),
+			'userTokenId'       => $order_info['email'],
+			'billingAddress'    => array(
+				'country' => urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_iso_code_2'])),
+			),
+			'webMasterId'       => 'OpenCart ' . VERSION,
+		);
+		
+		if($settings['force_http'] == 'yes') {
+            $oo_params['urlDetails']['notificationUrl']
+				= str_replace('https://', 'http://', $oo_params['urlDetails']['notificationUrl']);
+        }
 
+		$oo_params['checksum'] = hash(
+			$settings['hash_type'],
+			$settings['merchant_id'] . $settings['merchantsite_id'] . $oo_params['clientRequestId']
+				. $total_amount . $oo_params['currency'] . $time . $settings['secret_key']
+		);
+
+		$resp = SC_CLASS::call_rest_api($oo_endpoint_url, $oo_params);
+		
+		if (
+			empty($resp['status']) || empty($resp['sessionToken'])
+			|| 'SUCCESS' != $resp['status']
+		) {
+			echo
+				'<script type="text/javascript">alert("'
+					. $this->language->get('pm_error') . '")</script>';
+			exit;
+		}
+		
+		$data['sessionToken'] = $resp['sessionToken'];
+		# Open Order END
+		
 		# get APMs
-		// client request id 1
-		$time = date('YmdHis', time());
-		$settings['cri1'] = $time. '_' .uniqid();
-
-		// checksum 1 - checksum for session token
-		$settings['cs1'] = hash(
-			$settings['hash_type'],
-			$settings['merchant_id'] . $settings['merchantsite_id']
-				. $settings['cri1'] . $time . $settings['secret_key']
+		$apms_params = array(
+			'merchantId'        => $oo_params['merchantId'],
+			'merchantSiteId'    => $oo_params['merchantSiteId'],
+			'clientRequestId'   => $time . '_' . uniqid(),
+			'timeStamp'         => $time,
+			'sessionToken'      => $resp['sessionToken'],
+			'currencyCode'      => $oo_params['currency'],
+			'countryCode'       => $oo_params['billingAddress']['country'],
+			'languageCode'      => current(explode('-', $this->session->data['language'])),
 		);
-
-		// client request id 2
-		$time = date('YmdHis', time());
-		$settings['cri2'] = $time. '_' .uniqid();
-
-		// checksum 2 - checksum for get apms
-		$time = date('YmdHis', time());
-		$settings['cs2'] = hash(
+		
+		$apms_params['checksum'] = hash(
 			$settings['hash_type'],
-			$settings['merchant_id'] . $settings['merchantsite_id']
-				. $settings['cri2'] . $time . $settings['secret_key']
+			$oo_params['merchantId'] . $oo_params['merchantSiteId'] . $apms_params['clientRequestId']
+				. $time . $settings['secret_key']
 		);
+		
+		$endpoint_url = 'yes' == $settings['test']
+			? SC_TEST_REST_PAYMENT_METHODS_URL : SC_LIVE_REST_PAYMENT_METHODS_URL;
 
-		$res = SC_REST_API::get_rest_apms($settings);
-
-		if(!is_array($res) || !isset($res['paymentMethods']) || empty($res['paymentMethods'])) {
-			SC_LOGGER::create_log($res, 'Get APMs problem with the response: ');
+		$res = SC_CLASS::call_rest_api($endpoint_url, $apms_params);
+		
+		if(!is_array($res) || empty($res['paymentMethods'])) {
+			SC_CLASS::create_log($res, 'Get APMs problem with the response: ');
 
 			echo
 				'<script type="text/javascript">alert("'
@@ -170,78 +146,24 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		$data['payment_methods'] = $res['paymentMethods'];
 		# get APMs END
 
-		// specific data for the REST payment
-		$params['client_request_id']    = $time .'_'. uniqid();
+		$data['scLocale']	= substr($this->get_locale(), 0, 2);
+		$data['action']		= $this->url->link($ctr_url_path . '/process_payment') . '&create_logs=' . ($settings['create_logs']);
+		$data['currency']	= $oo_params['currency'];
+		$data['amount']		= $oo_params['amount'];
 
-		$params['checksum'] = hash(
-			$settings['hash_type'],
-			stripslashes(
-				$settings['merchant_id']
-				.$settings['merchantsite_id']
-				.$params['client_request_id']
-				.$params['total_amount']
-				.$params['currency']
-				.$order_time
-				.$settings['secret_key']
-			)
-		);
-
-		// params for last get_session_token
-		$time = date('YmdHis', time());
-		$un_req_id = uniqid();
-		$st_cs = hash(
-			$settings['hash_type'],
-			$settings['merchant_id'] . $settings['merchantsite_id']
-				. $un_req_id . $time . $settings['secret_key']
-		);
-
-		$resp = SC_REST_API::get_session_token(array(
-			'merchantId'        => $settings['merchantId'],
-			'merchantSiteId'    => $settings['merchantSiteId'],
-			'cri1'              => $un_req_id,
-			'cs1'               => $st_cs,
-			'timeStamp'         => $time,
-			'test'              => $settings['test'],
-		));
-
-		if(!$resp || !isset($resp['sessionToken']) || !$resp['sessionToken']) {
-			SC_LOGGER::create_log($resp, 'Error when trying to generate Session Token for Fields! :');
-
-			echo
-				'<script type="text/javascript">alert("'
-					. $this->language->get('pm_error') . '")</script>';
-			exit;
-		}
-
-		unset($settings['secret_key']);
-		$this->session->data['SC_Settings'] = $settings;
-
-		$data['sessionToken']   = $resp['sessionToken'];
-		$data['scLocale']       = substr($params['merchantLocale'], 0, 2);
-
-		$data['action'] = $this->url->link($ctr_url_path . '/process_payment')
-			. '&create_logs=' . ($settings['create_logs']);
-
-		$data['payload_url'] = $this->url->link($ctr_url_path . '/sc_ajax_call')
-			. '&create_logs=' . $settings['create_logs'];
-
-		// fields for the template
-		$data['html_inputs'] = $params;
-		
         // data for the template
-		$data['sc_test_env']        = $settings['test'];
+		$data['sc_test_env']			= $settings['test'];
         
         // texts
 		$data['sc_attention']           = $this->language->get('sc_attention');
 		$data['sc_go_to_step_2_error']  = $this->language->get('sc_go_to_step_2_error');
 		$data['button_confirm']         = $this->language->get('button_confirm');
 		$data['sc_btn_loading']         = $this->language->get('Loading...');
-        $data['sc_upos_title']          = $this->language->get('sc_upos_title');
         $data['sc_pms_title']           = $this->language->get('sc_pms_title');
         $data['choose_pm_error']        = $this->language->get('choose_pm_error');
         $data['rest_no_apms_error']     = $this->language->get('rest_no_apms_error');
-        $data['sc_token_error']         = $this->language->get('sc_token_error');
-        $data['sc_token_error_2']       = $this->language->get('sc_token_error_2');
+        $data['sc_order_declined']		= $this->language->get('sc_order_declined');
+        $data['sc_order_error']			= $this->language->get('sc_order_error');
         
         // load common php template and then pass it to the real template
         // as single variable. The form is same for both versions
@@ -255,7 +177,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
     // on success add history note for the order
     public function success()
     {
-        SC_LOGGER::create_log('success page');
+        SC_CLASS::create_log('success page');
         
         $this->load->model('checkout/order');
         
@@ -287,7 +209,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function fail()
 	{
-        SC_LOGGER::create_log(@$_REQUEST, 'Order FAIL: ');
+        SC_CLASS::create_log(@$_REQUEST, 'Order FAIL: ');
         
 		$arr = explode("_", @$_REQUEST['invoice_id']);
 		$order_id  = intval($arr[0]);
@@ -308,10 +230,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
 	public function callback()
     {
-        SC_LOGGER::create_log(@$_REQUEST, 'DMN request: ');
+        SC_CLASS::create_log(@$_REQUEST, 'DMN request: ');
         
         if(!$this->checkAdvancedCheckSum()) {
-            SC_LOGGER::create_log('', 'DMN report: You receive DMN from not trusted source. The process ends here.');
+            SC_CLASS::create_log('', 'DMN report: You receive DMN from not trusted source. The process ends here.');
             exit;
         }
         
@@ -326,10 +248,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             isset($_REQUEST['transactionType'], $_REQUEST['invoice_id'])
             && in_array($_REQUEST['transactionType'], array('Sale', 'Auth'))
         ) {
-            SC_LOGGER::create_log('', 'A sale/auth.');
+            SC_CLASS::create_log('', 'A sale/auth.');
             $order_id = 0;
             
-                SC_LOGGER::create_log('REST sale.');
+                SC_CLASS::create_log('REST sale.');
                 
 			try {
 				$order_id = intval(@$_REQUEST['merchant_unique_id']);
@@ -344,7 +266,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 }
             }
             catch (Exception $ex) {
-                SC_LOGGER::create_log($ex->getMessage(), 'Sale DMN Exception: ');
+                SC_CLASS::create_log($ex->getMessage(), 'Sale DMN Exception: ');
                 echo 'DMN Exception: ' . $ex->getMessage();
                 exit;
             }
@@ -361,12 +283,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 || in_array(@$_REQUEST['transactionType'], array('Credit', 'Refund')))
             && !empty($req_status)
         ) {
-            SC_LOGGER::create_log('OpenCart Refund DMN.');
+            SC_CLASS::create_log('OpenCart Refund DMN.');
             
             $order_info = $this->model_checkout_order->getOrder(@$_REQUEST['order_id']);
             
             if(!$order_info) {
-                SC_LOGGER::create_log($order_info, 'There is no order info: ');
+                SC_CLASS::create_log($order_info, 'There is no order info: ');
                     
                 $this->model_checkout_order->addOrderHistory(
                     @$_REQUEST['order_id'],
@@ -392,7 +314,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             && $_REQUEST['order_id'] != ''
             && in_array($_REQUEST['transactionType'], array('Void', 'Settle'))
         ) {
-            SC_LOGGER::create_log($_REQUEST['transactionType'], 'Void/Settle transactionType: ');
+            SC_CLASS::create_log($_REQUEST['transactionType'], 'Void/Settle transactionType: ');
             
             try {
                 $order_info = $this->model_checkout_order->getOrder($_REQUEST['order_id']);
@@ -404,14 +326,14 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $this->change_order_status(intval(@$_REQUEST['order_id']), $req_status, $_REQUEST['transactionType']);
             }
             catch (Exception $ex) {
-                SC_LOGGER::create_log(
+                SC_CLASS::create_log(
                     $ex->getMessage(),
                     'callback() Void/Settle Exception: '
                 );
             }
         }
         
-        SC_LOGGER::create_log('', 'Callback end. ');
+        SC_CLASS::create_log('', 'Callback end. ');
         
         echo 'DMN received.';
         exit;
@@ -425,8 +347,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest'
             && $_POST['needST'] == 1
         ) {
-            require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR. 'SC_REST_API.php';
-            
             SC_REST_API::get_session_token($this->session->data['SC_Settings'], true);
         }
         
@@ -441,116 +361,151 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function process_payment()
     {
-        SC_LOGGER::create_log('process_payment()');
+        SC_CLASS::create_log('process_payment()');
         
-        $post = $this->request->post;
-        
-        if(!@$post['payment_method_sc']) {
-            SC_LOGGER::create_log('process_payment - payment_method_sc problem');
+        $post			= $this->request->post;
+		$ctr_file_path	= SafeChargeVersionResolver::get_ctr_file_path();
+		$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+		
+		SC_CLASS::create_log('process_payment - payment_method_sc problem');
+		
+		$success_url    = $this->url->link($ctr_file_path . '/success');
+		$pending_url	= $this->url->link($ctr_file_path . '/success');
+		$error_url      = $this->url->link($ctr_file_path . '/fail');
+		$back_url       = $this->url->link('checkout/checkout', '', true);
+		$notify_url     = $this->url->link($ctr_file_path . '/callback&create_logs='
+			. $this->session->data['create_logs']);
+		
+        if(empty($post['payment_method_sc'])) {
+            SC_CLASS::create_log('process_payment - payment_method_sc problem');
             
-            $this->response->redirect(@$post['error_url']);
+            $this->response->redirect($error_url);
         }
-        
-        require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR .'safecharge' . DIRECTORY_SEPARATOR. 'SC_REST_API.php';
-        
-        $ctr_file_path  = SafeChargeVersionResolver::get_ctr_file_path();
-        $ctr_url_path   = SafeChargeVersionResolver::get_public_ctr_file_path();
+		
+		# WebSDK
+		if(
+			in_array($post['payment_method_sc'], array('cc_card', 'dc_card'))
+			&& !empty($post['sc_transaction_id'])
+		) {
+			$this->finish_payment(
+				$this->session->data['order_id'], 
+				$post['sc_transaction_id'], 
+				$success_url, $error_url
+			);
+		}
+		
+		# APMs
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+		
+		$this->load->model('checkout/order');
+		$this->order_info = $this->model_checkout_order->getOrder($this->session->data['order_id']);
         
         $this->language->load($ctr_file_path);
         $data['process_payment'] = $this->language->get('Processing the payment. Please, wait!');
         
         $TimeStamp = date('YmdHis', time());
+		
+		$total_amount = $this->currency->format(
+            $this->order_info['total'],
+            $this->order_info['currency_code'],
+            $this->order_info['currency_value'],
+            false
+        );
+        
+        if($total_amount < 0) {
+            $total_amount = number_format(0, 2, '.', '');
+        }
+        else {
+            $total_amount = number_format($total_amount, 2, '.', '');
+        }
+		
+		$countriesWithStates = array('US', 'IN', 'CA');
+		
+		$state = preg_replace("/[[:punct:]]/", '', substr($this->order_info['payment_zone'], 0, 2));
+		if (in_array($this->order_info['payment_iso_code_2'], $countriesWithStates)) {
+			$state = $this->order_info['payment_zone_code'];
+		}
         
         // map here variables
         try {
-            $test_mode  = $this->config->get($settigs_prefix . 'test_mode');
-            $secret     = $this->config->get($settigs_prefix . 'secret');
-            $hash       = $this->config->get($settigs_prefix . 'hash_type');
-            
             $params = array(
-                'merchantId'        => $post['merchant_id'],
-                'merchantSiteId'    => $post['merchant_site_id'],
-                'userTokenId'       => $post['user_token_id'],
-                'clientUniqueId'    => $this->session->data['order_id'],
-                'clientRequestId'   => $post['client_request_id'],
-                'currency'          => $post['currency'],
-                'amount'            => (string) $post['total_amount'],
+                'merchantId'        => $this->config->get($settigs_prefix . 'ppp_Merchant_ID'),
+                'merchantSiteId'    => $this->config->get($settigs_prefix . 'ppp_Merchant_Site_ID'),
+				'userTokenId'       => $this->order_info['email'],
+				'clientUniqueId'    => $this->session->data['order_id'],
+				'merchant_unique_id'=> $this->session->data['order_id'],
+				'clientRequestId'   => $TimeStamp . '_' . uniqid(),
+				'currency'          => $this->order_info['currency_code'],
+                'amount'            => (string) $total_amount,
                 'amountDetails'     => array(
                     'totalShipping'     => '0.00',
                     'totalHandling'     => '0.00',
                     'totalDiscount'     => '0.00',
                     'totalTax'          => '0.00',
                 ),
-                'items'             => $post['items'],
+                'items'             => array(
+					'name'		=> $this->session->data['order_id'],
+					'price'		=> $total_amount,
+					'quantity'	=> 1,
+				),
                 'userDetails'       => array(
-                    'firstName'         => $post['first_name'],
-                    'lastName'          => $post['last_name'],
-                    'address'           => $post['address1'],
-                    'phone'             => $post['phone1'],
-                    'zip'               => $post['zip'],
-                    'city'              => $post['city'],
-                    'country'           => $post['country'],
-                    'state'             => '',
-                    'email'             => $post['email'],
+                    'firstName'         => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_firstname']),
+                    'lastName'          => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_lastname']),
+                    'address'           => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_address_1']),
+                    'phone'             => preg_replace("/[[:punct:]]/", '', $this->order_info['telephone']),
+                    'zip'               => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_postcode']),
+                    'city'              => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_city']),
+                    'country'           => $this->order_info['payment_iso_code_2'],
+                    'state'             => $state,
+                    'email'             => $this->order_info['email'],
                     'county'            => '',
                 ),
                 'shippingAddress'   => array(
-                    'firstName'         => $post['shippingFirstName'],
-                    'lastName'          => $post['shippingLastName'],
-                    'address'           => $post['shippingAddress'],
+                    'firstName'         => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_firstname']),
+                    'lastName'          => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_lastname']),
+                    'address'           => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_address_1']),
                     'cell'              => '',
                     'phone'             => '',
-                    'zip'               => $post['shippingZip'],
-                    'city'              => $post['shippingCity'],
-                    'country'           => $post['shippingCountry'],
+                    'zip'               => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_postcode']),
+                    'city'              => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_city']),
+                    'country'           => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_iso_code_2']),
                     'state'             => '',
                     'email'             => '',
                     'shippingCounty'    => '',
                 ),
-                'billingAddress'   => array(
-                    'firstName'         => $post['first_name'],
-                    'lastName'          => $post['last_name'],
-                    'address'           => $post['address1'],
-                    'cell'              => '',
-                    'phone'             => $post['phone1'],
-                    'zip'               => $post['zip'],
-                    'city'              => $post['city'],
-                    'country'           => $post['country'],
-                    'state'             => $post['state'],
-                    'email'             => $post['email'],
-                    'county'            => '',
+				'urlDetails'        => array(
+                    'successUrl'        => $success_url,
+                    'failureUrl'        => $error_url,
+                    'pendingUrl'        => $pending_url,
+                    'backUrl'			=> $back_url,
+                    'notificationUrl'   => $notify_url,
                 ),
-                'urlDetails'        => array(
-                    'successUrl'        => $post['success_url'],
-                    'failureUrl'        => $post['error_url'],
-                    'pendingUrl'        => $post['pending_url'],
-                    'notificationUrl'   => $post['notify_url'],
-                ),
-                'timeStamp'         => $TimeStamp,
-                'webMasterID'       => @$post['webMasterId'],
+				'timeStamp'			=> $TimeStamp,
+				'webMasterID'       => 'OpenCart ' . VERSION,
                 'sessionToken'      => @$post['lst'],
-                'deviceDetails'     => SC_REST_API::get_device_details(),
+                'deviceDetails'     => SC_CLASS::get_device_details(),
             );
-            
+			
+			$params['billingAddress'] = $params['userDetails'];
+			
             $params['checksum'] = hash(
-                $hash,
+                $this->config->get($settigs_prefix . 'hash_type'),
                 $params['merchantId'] . $params['merchantSiteId'] . $params['clientRequestId']
-                    . $params['amount'] . $params['currency'] . $TimeStamp . $secret
+                    . $params['amount'] . $params['currency'] . $TimeStamp
+					. $this->config->get($settigs_prefix . 'secret')
             );
             
-			$endpoint_url = $test_mode == 'no' ? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
+			$endpoint_url = $this->config->get($settigs_prefix . 'test_mode') == 'no'
+				? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
 			$params['paymentMethod'] = $post['payment_method_sc'];
 
 			if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
-				$params['userAccountDetails'] = $_POST[$_POST['payment_method_sc']];
+				$params['userAccountDetails'] = $post[$post['payment_method_sc']];
 			}
             
-            $resp = SC_REST_API::call_rest_api($endpoint_url, $params);
+            $resp = SC_CLASS::call_rest_api($endpoint_url, $params);
             
-            SC_LOGGER::create_log($resp, 'process_payment response:');
-            
-            if(!$resp || $this->get_request_status($resp) == 'ERROR') {
+            if(!$resp) {
                 $this->response->redirect($post['error_url']);
             }
             
@@ -561,7 +516,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                     @$resp['transactionType']
                 );
                 
-                $this->response->redirect($post['error_url']);
+                $this->response->redirect($error_url);
             }
             
             if(@$resp['transactionStatus'] == 'DECLINED') {
@@ -581,38 +536,50 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 }
             }
             
-            $this->load->model('checkout/order');
-            $order_info = $this->model_checkout_order->getOrder($resp['orderId']);
-
-            if($order_info['order_status_id'] == $this->config->get($settigs_prefix . 'pending_status_id')) {
-                $this->model_checkout_order->addOrderHistory($resp['orderId'], 5, 'Order Completed.', false);
-                $order_info['order_status_id'] = 5;
+            $this->finish_payment($resp['orderId'], $resp['transactionId'], $success_url, $error_url);
+        }
+        catch (Exception $ex) {
+            SC_CLASS::create_log($ex->getMessage(), 'process_payment Exception: ');
+            $this->response->redirect($post['error_url']);
+        }
+    }
+	
+	private function finish_payment($order_id, $trans_id, $success_url, $error_url)
+	{
+		try {
+			$this->load->model('checkout/order');
+			
+			$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+			
+            if($this->order_info['order_status_id'] == $this->config->get($settigs_prefix . 'pending_status_id')) {
+                $this->model_checkout_order->addOrderHistory($order_id, 5, 'Order Completed.', false);
+                $this->order_info['order_status_id'] = 5;
             }
 
-            if(isset($resp['transactionId']) && $resp['transactionId'] != '') {
+            if(!empty($trans_id)) {
                 $this->model_checkout_order->addOrderHistory(
-                    $resp['orderId'],
-                    $order_info['order_status_id'],
-                    'Payment succsess for Transaction Id ' . $resp['transactionId'],
+                    $order_id,
+                    $this->order_info['order_status_id'],
+                    'Payment succsess for Transaction Id ' . $trans_id,
                     true
                 );
             }
             else {
                 $this->model_checkout_order->addOrderHistory(
-                    $resp['orderId'],
-                    $order_info['clientUniqueId'],
+                    $order_id,
+                    $this->order_info['clientUniqueId'],
                     'Payment succsess.',
                     true
                 );
             }
 			
-			$this->response->redirect($data['success_url']);
-        }
-        catch (Exception $ex) {
-            SC_LOGGER::create_log($ex->getMessage(), 'process_payment Exception: ');
-            $this->response->redirect($post['error_url']);
-        }
-    }
+			$this->response->redirect($success_url);
+		}
+		catch (Exception $ex) {
+			SC_CLASS::create_log($ex->getMessage(), 'process_payment Exception: ');
+            $this->response->redirect($error_url);
+		}
+	}
     
     /**
      * Function checkAdvancedCheckSum
@@ -707,7 +674,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
     {
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
         
-        SC_LOGGER::create_log(
+        SC_CLASS::create_log(
             'Order ' . $order_id .' has Status: ' . $status,
             'Change_order_status(): '
         );
@@ -813,7 +780,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         $this->db->query($q);
                     }
                     catch(Exception $e) {
-                        SC_LOGGER::create_log($e->getMessage(), 'Change order status Exception: ');
+                        SC_CLASS::create_log($e->getMessage(), 'Change order status Exception: ');
                     }
                     break;
                 }
@@ -940,10 +907,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 break;
                 
             default:
-                SC_LOGGER::create_log($status, 'Unexisting status: ');
+                SC_CLASS::create_log($status, 'Unexisting status: ');
         }
         
-        SC_LOGGER::create_log($order_id . ', ' . $status_id . ', ' . $message, '$order_id, $status_id, $message: ');
+        SC_CLASS::create_log($order_id . ', ' . $status_id . ', ' . $message, '$order_id, $status_id, $message: ');
         
         $this->model_checkout_order->addOrderHistory($order_id, $status_id, $message, $send_message);
     }
@@ -1004,7 +971,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             );
         }
         catch (Exception $e) {
-            SC_LOGGER::create_log($e->getMessage(), 'Exception in update_custom_payment_fields():');
+            SC_CLASS::create_log($e->getMessage(), 'Exception in update_custom_payment_fields():');
         }
     }
     

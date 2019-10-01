@@ -1,7 +1,7 @@
 <?php
 
 /**
- * SC_REST_API Class
+ * SC_CLASS Class
  * 
  * A class for work with SafeCharge REST API.
  * 
@@ -9,192 +9,31 @@
  *
  * @author SafeCharge
  */
-class SC_REST_API
+class SC_CLASS
 {
-    /**
-     * Function refund_order
-     * Create a refund.
-     * 
-     * @params array $settings - the GW settings
-     * @params array $refund - system last refund data
-     * @params array $order_meta_data - additional meta data for the order
-     * @params string $currency - used currency
-     * @params string $notify_url
-     */
-    public static function refund_order($settings, $refund, $order_meta_data, $currency, $notify_url)
-    {
-        $refund_url = '';
-        $cpanel_url = '';
-        $ref_parameters = array();
-        $other_params = array();
-        
-        $time = date('YmdHis', time());
-        
-    	try {
-            $refund_url = SC_TEST_REFUND_URL;
-            $cpanel_url = SC_TEST_CPANEL_URL;
-
-            if($settings['test'] == 'no') {
-                $refund_url = SC_LIVE_REFUND_URL;
-                $cpanel_url = SC_LIVE_CPANEL_URL;
-            }
-
-            // order transaction ID
-            $ord_tr_id = $order_meta_data['order_tr_id'];
-            if(!$ord_tr_id || empty($ord_tr_id)) {
-                return array(
-                    'msg' => 'The Order does not have Transaction ID. Refund can not procceed.',
-                    'new_order_status' => ''
-                );
-            }
-
-            $ref_parameters = array(
-                'merchantId'            => $settings['merchantId'],
-                'merchantSiteId'        => $settings['merchantSiteId'],
-                'clientRequestId'       => $time . '_' . $ord_tr_id,
-                'clientUniqueId'        => $refund['id'],
-                'amount'                => number_format($refund['amount'], 2, '.', ''),
-                'currency'              => $currency,
-                'relatedTransactionId'  => $ord_tr_id, // GW Transaction ID
-                'authCode'              => $order_meta_data['auth_code'],
-                'comment'               => $refund['reason'], // optional
-                'url'                   => $notify_url,
-                'timeStamp'             => $time,
-            );
-
-            $checksum = '';
-            foreach($ref_parameters as $val) {
-                $checksum .= $val;
-            }
-            
-            $checksum = hash(
-                $settings['hash_type'],
-                $checksum . $settings['secret']
-            );
-
-            $other_params = array(
-                'urlDetails'    => array('notificationUrl' => $notify_url),
-                'webMasterId'   => $refund['webMasterId'],
-            );
-        }
-        catch(Exception $e) {
-            return array(
-                'msg' => 'Exception ERROR - "' . print_r($e->getMessage()) .'".',
-                'new_order_status' => ''
-            );
-        }
-        
-        SC_LOGGER::create_log($refund_url, 'URL: ');
-        SC_LOGGER::create_log($ref_parameters, 'refund_parameters: ');
-        SC_LOGGER::create_log($other_params, 'other_params: ');
-        
-        $json_arr = self::call_rest_api(
-            $refund_url,
-            $ref_parameters,
-            $checksum,
-            $other_params
-        );
-        
-        SC_LOGGER::create_log($json_arr, 'Refund Response: ');
-        return $json_arr;
-    }
-    
-    /**
-     * function void_and_settle_order
-     * Settle and Void order via Settle / Void button.
-     * 
-     * @param array $data - all data for the void is here, pass it directly
-     * @param string $action - void or settle
-     * @param bool $is_ajax - is call coming via Ajax
-     * 
-     * TODO we must test the case when we call this method from another, NOT via Ajax
-     */
-    public static function void_and_settle_order($data, $action, $is_ajax = false)
-    {
-        SC_LOGGER::create_log('', 'void_and_settle_order() - ' . $action . ': ');
-        $resp = false;
-        $status = 1;
-        
-        try {
-            if($action == 'settle') {
-                $url = $data['test'] == 'no' ? SC_LIVE_SETTLE_URL : SC_TEST_SETTLE_URL;
-            }
-            elseif($action == 'void') {
-                $url = $data['test'] == 'no' ? SC_LIVE_VOID_URL : SC_TEST_VOID_URL;
-            }
-            
-            // we get array
-            $resp = self::call_rest_api($url, $data, $data['checksum']);
-        }
-        catch (Exception $e) {
-            SC_LOGGER::create_log($e->getMessage(), $action . ' order Exception ERROR when call REST API: ');
-            
-            if($is_ajax) {
-                echo json_encode(array('status' => 0, 'data' => $e->getMessage()));
-                exit;
-            }
-            
-            return false;
-        }
-        
-        SC_LOGGER::create_log($resp, 'SC_REST_API void_and_settle_order() full response: ');
-        
-        if(
-            !$resp || !is_array($resp)
-            || @$resp['status'] == 'ERROR'
-            || @$resp['transactionStatus'] == 'ERROR'
-            || @$resp['transactionStatus'] == 'DECLINED'
-        ) {
-            $status = 0;
-        }
-        
-        if($is_ajax) {
-            echo json_encode(array('status' => $status, 'data' => $resp));
-            exit;
-        }
-
-        return $resp;
-    }
-
     /**
      * Function call_rest_api
      * Call REST API with cURL post and get response.
      * The URL depends from the case.
      * 
      * @param type $url - API URL
-     * @param array $checksum_params - parameters we use for checksum
-     * @param string $checksum - the checksum
-     * @param array $other_params - other parameters we use
+     * @param array $params
      * 
      * @return mixed
      */
-    public static function call_rest_api($url, $checksum_params, $checksum = '', $other_params = array())
+    public static function call_rest_api($url, $params)
     {
         $resp = false;
-        
-        if(
-            (!isset($checksum_params['checksum']) || empty($checksum_params['checksum']))
-            && !empty($checksum)
-        ) {
-            $checksum_params['checksum'] = $checksum;
-        }
-        
-        if(!empty($other_params) and is_array($other_params)) {
-            $params = array_merge($checksum_params, $other_params);
-        }
-        else {
-            $params = $checksum_params;
-        }
-        
+		
         // get them only if we pass them empty
         if(isset($params['deviceDetails']) && empty($params['deviceDetails'])) {
             $params['deviceDetails'] = self::get_device_details();
         }
         
-        SC_LOGGER::create_log($params, 'SC_REST_API, parameters for the REST API call: ');
-        
+		self::create_log($url, 'REST API URL:');
+		self::create_log($params, 'REST API params:');
+		
         $json_post = json_encode($params);
-    //    SC_LOGGER::create_log($json_post, 'params as json: ');
         
         try {
             $header =  array(
@@ -215,12 +54,13 @@ class SC_REST_API
 
             $resp = curl_exec($ch);
             curl_close ($ch);
+			
+			$resp_arr = json_decode($resp, true);
             
-            SC_LOGGER::create_log($url, 'REST API URL: ');
-        //    SC_LOGGER::create_log($resp, 'REST API response: ');
+            self::create_log($resp_arr, 'REST API Response: ');
         }
         catch(Exception $e) {
-            SC_LOGGER::create_log($e->getMessage(), 'Exception ERROR when call REST API: ');
+            self::create_log($e->getMessage(), 'Exception ERROR when call REST API: ');
             return false;
         }
         
@@ -228,224 +68,6 @@ class SC_REST_API
             return false;
         }
 
-        return json_decode($resp, true);
-    }
-    
-    /**
-     * Function get_rest_apms
-     * Get REST API APMs by passed data.
-     * 
-     * @param array $data - session data, or other passed data
-     * @param bool $is_ajax - is ajax call, after country changed
-     * 
-     * @return string - json
-     */
-    public static function get_rest_apms($data = array(), $is_ajax = false)
-    {
-        $checksum_params = array();
-        $other_params = array();
-        $resp_arr = array();
-        
-        // getSessionToken
-        $session_token_data = self::get_session_token($data);
-        
-        if(
-            !isset($session_token_data['sessionToken'])
-            || empty($session_token_data['sessionToken'])
-            || !is_string($session_token_data['sessionToken'])
-        ) {
-            SC_LOGGER::create_log($session_token_data, 'Session Token is FALSE.');
-            
-            $resp = array(
-                'status' => 0,
-                'msg' => 'No Session Token',
-                'ses_t_data' => json_encode($session_token_data),
-            );
-            
-            if($is_ajax) {
-                echo json_encode($resp);
-                exit;
-            }
-            
-            return json_encode($resp);
-        }
-        
-        $session_token = $session_token_data['sessionToken'];
-        
-        try {
-            $checksum_params = array(
-                'merchantId'        => $data['merchantId'],
-                'merchantSiteId'    => $data['merchantSiteId'],
-                'clientRequestId'   => $data['cri2'],
-                'timeStamp'         => current(explode('_', $data['cri2'])),
-            );
-
-            $other_params = array(
-                'sessionToken'      => $session_token,
-                'currencyCode'      => $data['currencyCode'],
-                'countryCode'       => $data['sc_country'],
-                'languageCode'      => $data['languageCode'],
-                'type'              => '', // optional
-            );
-            
-            SC_LOGGER::create_log('', 'Call REST API to get REST APMs: ');
-
-            $resp_arr = self::call_rest_api(
-                $data['test'] == 'yes' ? SC_TEST_REST_PAYMENT_METHODS_URL : SC_LIVE_REST_PAYMENT_METHODS_URL,
-                $checksum_params,
-                $data['cs2'],
-                $other_params
-            );
-        }
-        catch(Exception $e) {
-            if($is_ajax) {
-                echo json_encode(array('status' => 0, 'data' => print_r($e->getMessage()), true));
-                exit;
-            }
-            
-            return false;
-        }
-        
-        if($is_ajax) {
-            echo json_encode(array(
-                'status' => 1,
-                'testEnv' => $data['test'],
-                'merchantSiteId' => $data['merchantSiteId'],
-                'langCode' => $data['languageCode'],
-                'data' => $resp_arr,
-            ));
-            exit;
-        }
-        
-        return $resp_arr;
-    }
-    
-    /**
-     * Function get_user_upos
-     * Get users UPOs
-     * 
-     * @param array $params - array with parameters
-     * @param array $data - other parameters not used for the UPOs call
-     * @param bool $is_ajax
-     */
-    public static function get_user_upos($params, $data, $is_ajax = false)
-    {
-        try {
-            if(isset($data['secret'])) {
-                $params['merchantSecretKey'] = $data['secret'];
-            }
-            
-            if(isset($data['checksum'])) {
-                $checksum = $data['checksum'];
-            }
-            else {
-                $checksum = hash(
-                    $data['hash_type'],
-                    $params['merchantId'] . $params['merchantSiteId'] . $params['userTokenId']
-                        . $params['clientRequestId'] . $params['timeStamp'] . $data['secret']
-                );
-            }
-            
-            $upos = self::call_rest_api(
-                $data['test'] == 'yes' ? SC_TEST_USER_UPOS_URL : SC_LIVE_USER_UPOS_URL,
-                $params,
-                $checksum
-            );
-        }
-        catch (Exception $ex) {
-            SC_LOGGER::create_log($ex->getMessage(), 'get_user_upos() Exception: ');
-            
-            if($is_ajax) {
-                echo json_encode(array('status' => 0, 'data' => print_r($ex->getMessage()), true));
-                exit;
-            }
-            
-            return false;
-        }
-        
-        if($is_ajax) {
-            echo json_encode(array(
-                'status' => 1,
-                'data' => $upos,
-            ));
-            exit;
-        }
-        
-        return $upos;
-    }
-    
-    /**
-     * Function get_session_token
-     * Get session tokens for different actions with the REST API.
-     * We can call this method with Ajax when need tokenization.
-     * 
-     * @param array $data
-     * @param bool $is_ajax
-     * 
-     * @return array|bool
-     */
-    public static function get_session_token($data, $is_ajax = false)
-    {
-        if(!isset($data['merchantId'], $data['merchantSiteId'])) {
-            SC_LOGGER::create_log($data, 'Missing mandatory session variables: ');
-            return false;
-        }
-        
-        $resp_arr = array();
-        
-        try {
-            $params = array(
-                'merchantId'        => $data['merchantId'],
-                'merchantSiteId'    => $data['merchantSiteId'],
-                'clientRequestId'   => $data['cri1'],
-                'timeStamp'         => @$data['timeStamp'] ? $data['timeStamp'] : date('YmdHis', time()),
-            );
-
-            SC_LOGGER::create_log(
-                $data['test'] == 'yes' ? SC_TEST_SESSION_TOKEN_URL : SC_LIVE_SESSION_TOKEN_URL,
-                'Call REST API for Session Token with URL: '
-            );
-            SC_LOGGER::create_log('Call REST API for Session Token. ');
-
-            $resp_arr = self::call_rest_api(
-                $data['test'] == 'yes' ? SC_TEST_SESSION_TOKEN_URL : SC_LIVE_SESSION_TOKEN_URL,
-                $params,
-                $data['cs1']
-            );
-        }
-        catch(Exception $e) {
-            SC_LOGGER::create_log($e->getMessage(), 'Getting SessionToken Exception ERROR: ');
-            
-            if($is_ajax) {
-                echo json_encode(array('status' => 0, 'msg' => $e->getMessage()));
-                exit;
-            }
-            
-            return false;
-        }
-        
-        if(
-            !$resp_arr
-            || !is_array($resp_arr)
-            || !isset($resp_arr['status'])
-            || $resp_arr['status'] != 'SUCCESS'
-        ) {
-            SC_LOGGER::create_log($resp_arr, 'getting getSessionToken error: ');
-            
-            if($is_ajax) {
-                echo json_encode(array('status' => 0));
-                exit;
-            }
-            
-            return false;
-        }
-        
-        if($is_ajax) {
-            $resp_arr['test'] = @$_SESSION['SC_Variables']['test'];
-            echo json_encode(array('status' => 1, 'data' => $resp_arr));
-            exit;
-        }
-        
         return $resp_arr;
     }
     
@@ -537,27 +159,63 @@ class SC_REST_API
         return $device_details;
     }
     
-    /**
-     * Function return_response
-     * Help us to return the expected response, when have $is_ajax option
-     * for the method.
+	/**
+     * Function create_log
+     * Create logs. You MUST have defined SC_LOG_FILE_PATH const,
+     * holding the full path to the log file.
      * 
-     * @param array $data
-     * @param bool $is_ajax
+     * @param mixed $data
+     * @param string $title - title of the printed log
      */
-    private static function return_response($data, $is_ajax = false)
-    {
-        if(!is_array($data)) {
-            SC_LOGGER::create_log($data, 'The data passed to return_response() is not array: ');
-            return false;
+    public static function create_log($data, $title = '')
+	{
+		if(
+            @$_REQUEST['create_logs'] == 'yes' || @$_REQUEST['create_logs'] == 1
+            || @$_SESSION['create_logs'] == 'yes' || @$_SESSION['create_logs'] == 1
+        ) {
+            // same for all plugins
+            $d = $data;
+
+            if(is_array($data)) {
+                if(isset($data['userAccountDetails']) && is_array($data['userAccountDetails'])) {
+                    foreach($data['userAccountDetails'] as $k => $v) {
+                        $data['userAccountDetails'][$k] = 'some data';
+                    }
+                }
+				
+                if(isset($data['userPaymentOption']) && is_array($data['userPaymentOption'])) {
+                    foreach($data['userPaymentOption'] as $k => $v) {
+                        $data['userPaymentOption'][$k] = 'some data';
+                    }
+                }
+                $d = print_r($data, true);
+            }
+            elseif(is_object($data)) {
+                $d = print_r($data, true);
+            }
+            elseif(is_bool($data)) {
+                $d = $data ? 'true' : 'false';
+            }
+
+            if(!empty($title)) {
+                $d = $title . "\r\n" . $d;
+            }
+            // same for all plugins
+
+            // path is different fore each plugin
+            if(!defined('DIR_LOGS') || !is_dir(DIR_LOGS)) {
+                return;
+            }
+            
+            try {
+                file_put_contents(
+                    DIR_LOGS . 'SafeCharge-' . date('Y-m-d', time()) . '.txt',
+                    date('H:i:s', time()) . ': ' . $d . "\r\n\r\n", FILE_APPEND
+                );
+            }
+            catch (Exception $exc) {
+                echo $exc->getMessage();
+            }
         }
-        
-        if($is_ajax) {
-            echo json_encode($data);
-            exit;
-        }
-        
-        return $data;
-    }
-    
+	}
 }
