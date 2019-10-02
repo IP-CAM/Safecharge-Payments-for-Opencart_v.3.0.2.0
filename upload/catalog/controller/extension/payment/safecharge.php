@@ -66,6 +66,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			'merchantId'        => $settings['merchant_id'],
 			'merchantSiteId'    => $settings['merchantsite_id'],
 			'clientRequestId'   => $time . '_' . uniqid(),
+			'clientUniqueId'	=> $this->session->data['order_id'],
 			'amount'            => $total_amount,
 			'currency'          => $order_info['currency_code'],
 			'timeStamp'         => $time,
@@ -339,21 +340,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         exit;
 	}
     
-    // we use it when tokenize a cart
-    public function sc_ajax_call()
-    {
-        if(
-            isset($_SERVER['HTTP_X_REQUESTED_WITH'], $_POST['needST'], $this->session->data['SC_Settings'])
-            && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest'
-            && $_POST['needST'] == 1
-        ) {
-            SC_REST_API::get_session_token($this->session->data['SC_Settings'], true);
-        }
-        
-        echo 'sc_ajax_call';
-        exit;
-    }
-    
     /**
      * Function process_payment
      * We use this method with REST API.
@@ -366,8 +352,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         $post			= $this->request->post;
 		$ctr_file_path	= SafeChargeVersionResolver::get_ctr_file_path();
 		$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
-		
-		SC_CLASS::create_log('process_payment - payment_method_sc problem');
 		
 		$success_url    = $this->url->link($ctr_file_path . '/success');
 		$pending_url	= $this->url->link($ctr_file_path . '/success');
@@ -399,7 +383,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		
 		$this->load->model('checkout/order');
 		$this->order_info = $this->model_checkout_order->getOrder($this->session->data['order_id']);
-        
+		
         $this->language->load($ctr_file_path);
         $data['process_payment'] = $this->language->get('Processing the payment. Please, wait!');
         
@@ -426,122 +410,116 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			$state = $this->order_info['payment_zone_code'];
 		}
         
-        // map here variables
-        try {
-            $params = array(
-                'merchantId'        => $this->config->get($settigs_prefix . 'ppp_Merchant_ID'),
-                'merchantSiteId'    => $this->config->get($settigs_prefix . 'ppp_Merchant_Site_ID'),
-				'userTokenId'       => $this->order_info['email'],
-				'clientUniqueId'    => $this->session->data['order_id'],
-				'merchant_unique_id'=> $this->session->data['order_id'],
-				'clientRequestId'   => $TimeStamp . '_' . uniqid(),
-				'currency'          => $this->order_info['currency_code'],
-                'amount'            => (string) $total_amount,
-                'amountDetails'     => array(
-                    'totalShipping'     => '0.00',
-                    'totalHandling'     => '0.00',
-                    'totalDiscount'     => '0.00',
-                    'totalTax'          => '0.00',
-                ),
-                'items'             => array(
-					'name'		=> $this->session->data['order_id'],
-					'price'		=> $total_amount,
-					'quantity'	=> 1,
-				),
-                'userDetails'       => array(
-                    'firstName'         => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_firstname']),
-                    'lastName'          => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_lastname']),
-                    'address'           => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_address_1']),
-                    'phone'             => preg_replace("/[[:punct:]]/", '', $this->order_info['telephone']),
-                    'zip'               => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_postcode']),
-                    'city'              => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_city']),
-                    'country'           => $this->order_info['payment_iso_code_2'],
-                    'state'             => $state,
-                    'email'             => $this->order_info['email'],
-                    'county'            => '',
-                ),
-                'shippingAddress'   => array(
-                    'firstName'         => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_firstname']),
-                    'lastName'          => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_lastname']),
-                    'address'           => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_address_1']),
-                    'cell'              => '',
-                    'phone'             => '',
-                    'zip'               => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_postcode']),
-                    'city'              => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_city']),
-                    'country'           => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_iso_code_2']),
-                    'state'             => '',
-                    'email'             => '',
-                    'shippingCounty'    => '',
-                ),
-				'urlDetails'        => array(
-                    'successUrl'        => $success_url,
-                    'failureUrl'        => $error_url,
-                    'pendingUrl'        => $pending_url,
-                    'backUrl'			=> $back_url,
-                    'notificationUrl'   => $notify_url,
-                ),
-				'timeStamp'			=> $TimeStamp,
-				'webMasterID'       => 'OpenCart ' . VERSION,
-                'sessionToken'      => @$post['lst'],
-                'deviceDetails'     => SC_CLASS::get_device_details(),
-            );
-			
-			$params['billingAddress'] = $params['userDetails'];
-			
-            $params['checksum'] = hash(
-                $this->config->get($settigs_prefix . 'hash_type'),
-                $params['merchantId'] . $params['merchantSiteId'] . $params['clientRequestId']
-                    . $params['amount'] . $params['currency'] . $TimeStamp
-					. $this->config->get($settigs_prefix . 'secret')
-            );
-            
-			$endpoint_url = $this->config->get($settigs_prefix . 'test_mode') == 'no'
-				? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
-			$params['paymentMethod'] = $post['payment_method_sc'];
+		$params = array(
+			'merchantId'        => $this->config->get($settigs_prefix . 'ppp_Merchant_ID'),
+			'merchantSiteId'    => $this->config->get($settigs_prefix . 'ppp_Merchant_Site_ID'),
+			'userTokenId'       => $this->order_info['email'],
+			'clientUniqueId'    => $this->session->data['order_id'],
+			'merchant_unique_id'=> $this->session->data['order_id'],
+			'clientRequestId'   => $TimeStamp . '_' . uniqid(),
+			'currency'          => $this->order_info['currency_code'],
+			'amount'            => (string) $total_amount,
+			'amountDetails'     => array(
+				'totalShipping'     => '0.00',
+				'totalHandling'     => '0.00',
+				'totalDiscount'     => '0.00',
+				'totalTax'          => '0.00',
+			),
+			'userDetails'       => array(
+				'firstName'         => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_firstname']),
+				'lastName'          => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_lastname']),
+				'address'           => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_address_1']),
+				'phone'             => preg_replace("/[[:punct:]]/", '', $this->order_info['telephone']),
+				'zip'               => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_postcode']),
+				'city'              => preg_replace("/[[:punct:]]/", '', $this->order_info['payment_city']),
+				'country'           => $this->order_info['payment_iso_code_2'],
+				'state'             => $state,
+				'email'             => $this->order_info['email'],
+				'county'            => '',
+			),
+			'shippingAddress'   => array(
+				'firstName'         => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_firstname']),
+				'lastName'          => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_lastname']),
+				'address'           => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_address_1']),
+				'cell'              => '',
+				'phone'             => '',
+				'zip'               => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_postcode']),
+				'city'              => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_city']),
+				'country'           => preg_replace("/[[:punct:]]/", '', $this->order_info['shipping_iso_code_2']),
+				'state'             => '',
+				'email'             => '',
+				'shippingCounty'    => '',
+			),
+			'urlDetails'        => array(
+				'successUrl'        => $success_url,
+				'failureUrl'        => $error_url,
+				'pendingUrl'        => $pending_url,
+				'backUrl'			=> $back_url,
+				'notificationUrl'   => $notify_url,
+			),
+			'timeStamp'			=> $TimeStamp,
+			'webMasterID'       => 'OpenCart ' . VERSION,
+			'sessionToken'      => @$post['lst'],
+			'deviceDetails'     => SC_CLASS::get_device_details(),
+		);
 
-			if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
-				$params['userAccountDetails'] = $post[$post['payment_method_sc']];
+		$params['billingAddress'] = $params['userDetails'];
+		
+		$params['items'][0] = array(
+			'name'		=> $this->session->data['order_id'],
+			'price'		=> $total_amount,
+			'quantity'	=> 1,
+		);
+
+		$params['checksum'] = hash(
+			$this->config->get($settigs_prefix . 'hash_type'),
+			$params['merchantId'] . $params['merchantSiteId'] . $params['clientRequestId']
+				. $params['amount'] . $params['currency'] . $TimeStamp
+				. $this->config->get($settigs_prefix . 'secret')
+		);
+
+		$endpoint_url = $this->config->get($settigs_prefix . 'test_mode') == 'no'
+			? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
+		$params['paymentMethod'] = $post['payment_method_sc'];
+
+		if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
+			$params['userAccountDetails'] = $post[$post['payment_method_sc']];
+		}
+            
+		$resp = SC_CLASS::call_rest_api($endpoint_url, $params);
+
+		if(!$resp) {
+			$this->response->redirect($post['error_url']);
+		}
+
+		if($this->get_request_status($resp) == 'ERROR' || @$resp['transactionStatus'] == 'ERROR') {
+			$this->change_order_status(
+				intval($this->session->data['order_id']), 
+				'ERROR', 
+				@$resp['transactionType']
+			);
+
+			$this->response->redirect($error_url);
+		}
+
+		if(@$resp['transactionStatus'] == 'DECLINED') {
+			$this->change_order_status(
+				intval($this->session->data['order_id']), 
+				'DECLINED', 
+				@$resp['transactionType']
+			);
+
+			$this->response->redirect($post['error_url']);
+		}
+
+		if($this->get_request_status($resp) == 'SUCCESS') {
+			// in case we have redirectURL
+			if(isset($resp['redirectURL']) && !empty($resp['redirectURL'])) {
+				$this->response->redirect($data['redirectURL']);
 			}
-            
-            $resp = SC_CLASS::call_rest_api($endpoint_url, $params);
-            
-            if(!$resp) {
-                $this->response->redirect($post['error_url']);
-            }
-            
-            if($this->get_request_status($resp) == 'ERROR' || @$resp['transactionStatus'] == 'ERROR') {
-                $this->change_order_status(
-                    intval($this->session->data['order_id']), 
-                    'ERROR', 
-                    @$resp['transactionType']
-                );
-                
-                $this->response->redirect($error_url);
-            }
-            
-            if(@$resp['transactionStatus'] == 'DECLINED') {
-                $this->change_order_status(
-                    intval($this->session->data['order_id']), 
-                    'DECLINED', 
-                    @$resp['transactionType']
-                );
-                
-                $this->response->redirect($post['error_url']);
-            }
-            
-            if($this->get_request_status($resp) == 'SUCCESS') {
-                // in case we have redirectURL
-                if(isset($resp['redirectURL']) && !empty($resp['redirectURL'])) {
-					$this->response->redirect($data['redirectURL']);
-                }
-            }
-            
-            $this->finish_payment($resp['orderId'], $resp['transactionId'], $success_url, $error_url);
-        }
-        catch (Exception $ex) {
-            SC_CLASS::create_log($ex->getMessage(), 'process_payment Exception: ');
-            $this->response->redirect($post['error_url']);
-        }
+		}
+
+		$this->finish_payment($resp['orderId'], $resp['transactionId'], $success_url, $error_url);
     }
 	
 	private function finish_payment($order_id, $trans_id, $success_url, $error_url)
@@ -703,7 +681,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             case 'APPROVED':
                 if($transactionType == 'Void') {
                     $message = $this->language->get('DMN message: Your Void request was success, Order #')
-                        . @$request['clientUniqueId'] . ' ' . $this->language->get('was canceld') . '.';
+                        . @$request['order_id'] . ' ' . $this->language->get('was canceld') . '.';
 
                     $status_id = $this->config->get($settigs_prefix . 'canceled_status_id');
                     break;

@@ -128,6 +128,12 @@
     .SfcField iframe {
         min-height: 20px !important;
     }
+	
+	.sfcModal-dialog {
+		width: 50%;
+		margin: 0 auto;
+		margin-top: 10%;
+	}
     /* fixes for last field borders END */
 </style>
 

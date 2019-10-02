@@ -398,32 +398,35 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             "INSERT INTO `sc_refunds` (orderId, clientUniqueId, amount) "
             . "VALUES ({$order_id}, '{$clientUniqueId}', ". floatval($this->request->post['amount']) .")");
         
-        // execute refund, the response must be array('msg' => 'some msg', 'new_order_status' => 'some status')
-        $json_arr = SC_REST_API::refund_order(
-            $settings
-            ,array(
-                'id'            => $clientUniqueId,
-                'amount'        => $this->request->post['amount'],
-                'reason'        => '', // no reason field
-                'webMasterId'   => 'OpenCart ' . VERSION
-            )
-            ,array(
-                'order_tr_id'   => $payment_custom_fields[SC_GW_TRANS_ID_KEY],
-                'auth_code'     => $payment_custom_fields[SC_AUTH_CODE_KEY],
-            )
-            ,$order_info['currency_code']
-            ,$notify_url
-        );
-        
-        if(!$json_arr) {
+		$time = date('YmdHis');
+		
+        $ref_parameters = array(
+			'merchantId'            => $settings['merchantId'],
+			'merchantSiteId'        => $settings['merchantSiteId'],
+			'clientRequestId'       => $time . '_' . $payment_custom_fields[SC_GW_TRANS_ID_KEY],
+			'clientUniqueId'        => $order_id,
+			'amount'                => $this->request->post['amount'],
+			'currency'              => $order_info['currency_code'],
+			'relatedTransactionId'  => $payment_custom_fields[SC_GW_TRANS_ID_KEY], // GW Transaction ID
+			'authCode'              => $payment_custom_fields[SC_AUTH_CODE_KEY],
+			'comment'               => '', // optional
+			'url'                   => $notify_url,
+			'timeStamp'             => $time,
+		);
+		
+		$refund_url = 'yes' == $settings['test'] ? SC_TEST_CPANEL_URL : SC_LIVE_REFUND_URL;
+		
+		$resp = SC_CLASS::call_rest_api($refund_url, $ref_parameters);	
+			
+        if(!$resp) {
             echo json_encode(array('status' => 0, 'msg' => 'Empty response.'));
             exit;
         }
         
         // in case we have message but without status
-        if(!isset($json_arr['status']) && isset($json_arr['msg'])) {
+        if(!isset($resp['status']) && isset($resp['msg'])) {
             // save response message in the History
-            $msg = 'Request Refund #' . $clientUniqueId . ' problem: ' . $json_arr['msg'];
+            $msg = 'Request Refund #' . $clientUniqueId . ' problem: ' . $resp['msg'];
             
             $this->db->query(
                 "INSERT INTO `" . DB_PREFIX ."order_history` (`order_id`, `order_status_id`, `notify`, `comment`, `date_added`) "
@@ -435,19 +438,13 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
-        $refund_url = SC_TEST_REFUND_URL;
-        $cpanel_url = SC_TEST_CPANEL_URL;
+        $cpanel_url = $settings['test'] == 'no' ? SC_LIVE_CPANEL_URL : SC_TEST_CPANEL_URL;
 
-        if($settings['test'] == 'no') {
-            $refund_url = SC_LIVE_REFUND_URL;
-            $cpanel_url = SC_LIVE_CPANEL_URL;
-        }
-        
         $msg = '';
         $error_note = 'Request Refund #' . $clientUniqueId . ' fail, if you want login into <i>' . $cpanel_url
             . '</i> and refund Transaction ID ' . $payment_custom_fields[SC_GW_TRANS_ID_KEY];
 
-        if($json_arr === false) {
+        if($resp === false) {
             $msg = 'The REST API retun false. ' . $error_note;
 
             // save response message in the History
@@ -461,11 +458,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
-        if(!is_array($json_arr)) {
-            parse_str($resp, $json_arr);
-        }
-
-        if(!is_array($json_arr)) {
+        if(!is_array($resp)) {
             $msg = 'Invalid API response. ' . $error_note;
 
             // save response message in the History
@@ -480,8 +473,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         }
         
         // the status of the request is ERROR
-        if(@$json_arr['status'] == 'ERROR') {
-            $msg = 'Request ERROR - "' . $json_arr['reason'] .'" '. $error_note;
+        if(@$resp['status'] == 'ERROR') {
+            $msg = 'Request ERROR - "' . $resp['reason'] .'" '. $error_note;
             
             // save response message in the History
             $this->db->query(
@@ -561,14 +554,13 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'authCode'              => $payment_custom_fields[SC_AUTH_CODE_KEY],
             'urlDetails'            => array('notificationUrl' => $notify_url),
             'timeStamp'             => $time,
-            'test'                  => $settings['test'], // need to define the endpoint
         );
         
         if(defined('VERSION')) {
             $params['webMasterId'] = 'OpenCart ' . VERSION;
         }
         
-        $checksum = hash(
+        $params['checksum'] = hash(
             $settings['hash_type'],
             $settings['merchantId'] . $settings['merchantSiteId'] . $params['clientRequestId']
                 . $params['clientUniqueId'] . $params['amount'] . $params['currency']
@@ -576,11 +568,34 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 . $notify_url . $time . $settings['secret']
         );
         
-        $params['checksum'] = $checksum;
-        
-        SC_CLASS::create_log($params, 'The params for Void/Settle: ');
-        
-        SC_REST_API::void_and_settle_order($params, $this->request->post['action'], true);
+		if ('settle' == $this->request->post['action']) {
+			$url = 'no' == $settings['test'] ? SC_LIVE_SETTLE_URL : SC_TEST_SETTLE_URL;
+		}
+		else {
+			$url = 'no' == $settings['test'] ? SC_LIVE_VOID_URL : SC_TEST_VOID_URL;
+		}
+		
+        $resp = SC_CLASS::call_rest_api($url, $params);
+		
+		if(
+            !$resp || !is_array($resp)
+            || @$resp['status'] == 'ERROR'
+            || @$resp['transactionStatus'] == 'ERROR'
+        ) {
+            echo json_encode(array('status' => 0));
+			exit;
+        }
+		
+		if(@$resp['transactionStatus'] == 'DECLINED') {
+            echo json_encode(array(
+				'status' => 0,
+				'msg' => 'Your request was Declined.'
+			));
+			exit;
+        }
+		
+		echo json_encode(array('status' => 1));
+		exit;
     }
     
     /**

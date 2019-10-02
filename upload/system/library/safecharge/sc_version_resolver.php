@@ -28,11 +28,6 @@ class SafeChargeVersionResolver
         return 'payment/safecharge';
     }
     
-    public static function get_public_ctr_file_path()
-    {
-        return 'payment/safecharge';
-    }
-    
     public static function get_adm_ctr_text_extension_key()
     {
         if (version_compare(VERSION, '3.0.0.0', '>')) {
