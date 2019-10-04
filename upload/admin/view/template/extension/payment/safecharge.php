@@ -241,59 +241,9 @@
                         <input type="text" name="<?= $settigs_prefix; ?>sort_order" value="<?= $data[$settigs_prefix . 'sort_order']; ?>" class="form-control" size="3" />
                     </div>
                 </div>
-                
-                <div class="form-group">
-                    <label class="col-sm-2 control-label"><?= $data['sc_btn_remove_logs']; ?></label>
-
-                    <div class="col-sm-10">
-                        <div id="delete-logs-alert" class="alert hide" role="alert"></div>
-
-                        <button id="delete-logs-btn" type="button" class="btn btn-md btn-danger" onclick="removeLogs()"><i class="fa fa-trash"></i></button>&nbsp;
-                        <span class="help-block" style="display: inline-block"><?= $data['sc_btn_remove_help']; ?></span>
-                    </div>
-                </div>
             </form>
         </div>
     </div>
 </div>
-
-<script type="text/javascript">
-    function removeLogs() {
-        if(confirm("<?= $data['sc_remove_log_confirm']; ?>")) {
-            $('#delete-logs-btn').prop('disabled', true);
-            $('#delete-logs-btn i')
-                .removeClass('fa-trash')
-                .addClass('fa-circle-o-notch fa-spin');
-            
-            $.ajax({
-                url: 'index.php?route=extension/payment/safecharge&<?= $token_name; ?>='+window.getURLVar('<?= $token_name; ?>'),
-                type: 'post',
-                dataType: 'json',
-                data: { action: 'removeLogs' }
-            })
-            .done(function(resp) {
-                if(resp.status == 1) {
-                    $('#delete-logs-alert')
-                        .addClass('alert-success')
-                        .removeClass('hide')
-                        .removeClass('alert-danger')
-                        .html(resp.msg);
-                }
-                else {
-                    $('#delete-logs-alert')
-                        .addClass('alert-danger')
-                        .removeClass('hide')
-                        .removeClass('alert-success')
-                        .html(resp.msg);
-                }
-                
-                $('#delete-logs-btn').prop('disabled', true);
-                $('#delete-logs-btn i')
-                    .removeClass('fa-circle-o-notch fa-spin')
-                    .addClass('fa-trash');
-            })
-        }
-    }
-</script>
 
 <?= $data['footer']; ?>
