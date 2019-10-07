@@ -329,10 +329,10 @@
 								.val("<?= @$data['button_confirm']; ?>");
                         }
                         else {
-                            if(resp.errorDescription != 'undefined' && resp.errorDescription != '') {
+                            if(resp.errorDescription != 'undefined' && resp.errorDescription !== '') {
                                 alert(resp.errorDescription);
                             }
-                            else if('undefined' != resp.reason && '' != resp.reason) {
+                            else if('undefined' != resp.reason && '' !== resp.reason) {
                                 alert(resp.reason);
                             }
                             else {
@@ -445,5 +445,3 @@
 	});
 	// document ready function END
 </script>
-
-<!--<script type="text/javascript" src="catalog/view/javascript/sc.js"></script>-->
