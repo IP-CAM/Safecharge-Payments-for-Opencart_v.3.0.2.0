@@ -311,7 +311,7 @@
                     currency        : "<?= @$data['currency'] ?>",
                     amount          : "<?= @$data['amount'] ?>",
                     cardHolderName  : document.getElementById('sc_card_holder_name').value,
-                    paymentOption   : scCard
+                    paymentOption   : scCard,
                 }, function(resp){
                     console.log(resp);
 

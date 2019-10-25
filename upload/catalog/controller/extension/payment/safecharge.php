@@ -83,6 +83,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 				'country' => urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_iso_code_2'])),
 			),
 			'webMasterId'       => 'OpenCart ' . VERSION,
+			'paymentOption'		=> ['card' => ['threeD' => ['isDynamic3D' => 1]]]
 		);
 		
 		if($settings['force_http'] == 'yes') {
