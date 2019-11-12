@@ -19,10 +19,6 @@ $_['entry_hash_type']		      	= 'Merchant Hash type:';
 $_['entry_option_cashier']		    = 'Hosted Payment Page';
 $_['entry_option_rest']             = 'SafeCharge API';
 
-$_['entry_transaction_type']		= 'Payment action:';
-$_['entry_sale']                    = 'Authorize & Capture';
-$_['entry_sale_settle']             = 'Authorize';
-
 $_['entry_test_mode']		      	= 'Test mode:';
 $_['entry_force_http']		      	= 'Use http Notify URL:';
 $_['entry_create_logs']		      	= 'Enable Logs:';

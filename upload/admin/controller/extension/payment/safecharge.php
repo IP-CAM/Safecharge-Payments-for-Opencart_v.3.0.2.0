@@ -193,7 +193,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'ppp_Merchant_Site_ID',
             'secret',
             'hash_type',
-            'transaction_type',
             'test_mode',
             'force_http',
             'create_logs',
@@ -653,7 +652,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'hash_type'         => $gw_settings[$settigs_prefix . 'hash_type'],
             'secret'            => $gw_settings[$settigs_prefix . 'secret'],
             'force_http'        => $gw_settings[$settigs_prefix . 'force_http'],
-            'transactionType'   => $gw_settings[$settigs_prefix . 'transaction_type'],
         );
     }
 

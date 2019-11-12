@@ -96,17 +96,6 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="col-sm-2 control-label"><?= $data['entry_transaction_type']; ?></label>
-                    
-                    <div class="col-sm-10">
-                        <select class="form-control" name="<?= $settigs_prefix; ?>transaction_type">
-                            <option value="Sale" <?php if (@$data[$settigs_prefix . 'transaction_type'] == "Sale"): ?>selected="selected"<?php endif; ?>><?= $data['entry_sale']; ?></option>
-                            <option value="Auth" <?php if (@$data[$settigs_prefix . 'transaction_type'] == "Auth"): ?>selected="selected"<?php endif; ?>><?= $data['entry_sale_settle']; ?></option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-group">
                     <label class="col-sm-2 control-label"><?= $data['entry_test_mode']; ?></label>
                     
                     <div class="col-sm-10">
