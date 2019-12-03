@@ -278,7 +278,7 @@
 	  * 
 	  * @param {int} elemId
 	  */
-	 function showErrorLikeInfo(elemId) {
+	function showErrorLikeInfo(elemId) {
 		$('#error_'+elemId).addClass('error_info');
 
 		if($('#error_'+elemId).hasClass('hide')) {
@@ -287,7 +287,7 @@
 		else {
 			$('#error_'+elemId).addClass('hide');
 		}
-	 }
+	}
 
 	/**
 	  * Function validateScAPMsModal
@@ -312,6 +312,7 @@
                     amount          : "<?= @$data['amount'] ?>",
                     cardHolderName  : document.getElementById('sc_card_holder_name').value,
                     paymentOption   : scCard,
+					webMasterId		: "<?= @$data['webMasterId'] ?>"
                 }, function(resp){
                     console.log(resp);
 

@@ -155,6 +155,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 
         // data for the template
 		$data['sc_test_env']			= $settings['test'];
+		$data['webMasterId']			= $oo_params['webMasterId'];
         
         // texts
 		$data['sc_attention']           = $this->language->get('sc_attention');
