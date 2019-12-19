@@ -80,9 +80,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
-        $token_name = SafeChargeVersionResolver::get_token_name();
-        $ctr_file_path = SafeChargeVersionResolver::get_ctr_file_path();
-        $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+        $token_name		= SafeChargeVersionResolver::get_token_name();
+        $ctr_file_path	= SafeChargeVersionResolver::get_ctr_file_path();
+        $settigs_prefix	= SafeChargeVersionResolver::get_settings_prefix();
         
         $this->load->model('setting/setting');
         

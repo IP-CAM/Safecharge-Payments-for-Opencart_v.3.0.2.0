@@ -94,6 +94,19 @@
                         </select>
                     </div>
                 </div>
+				
+                <div class="form-group">
+                    <label class="col-sm-2 control-label"><?= $data['entry_payment_action']; ?></label>
+                    
+                    <div class="col-sm-10">
+                        <select class="form-control" name="<?= $settigs_prefix; ?>payment_action">
+                            <option value="Sale" <?php if (@$data[$settigs_prefix . 'payment_action'] == "Sale"): ?>
+									selected="selected"<?php endif; ?>>Authorize and Capture</option>
+                            <option value="Auth" <?php if (@$data[$settigs_prefix . 'payment_action'] == "Auth"): ?>
+									selected="selected"<?php endif; ?>>Authorize</option>
+                        </select>
+                    </div>
+                </div>
                 
                 <div class="form-group">
                     <label class="col-sm-2 control-label"><?= $data['entry_test_mode']; ?></label>
