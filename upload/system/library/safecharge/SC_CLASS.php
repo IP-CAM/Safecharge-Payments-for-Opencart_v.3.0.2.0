@@ -188,6 +188,11 @@ class SC_CLASS
                         $data['userPaymentOption'][$k] = 'some data';
                     }
                 }
+				
+				if(!empty($data['paymentMethods'])) {
+                    $data['paymentMethods'] = json_encode($data['paymentMethods']);
+                }
+				
                 $d = print_r($data, true);
             }
             elseif(is_object($data)) {

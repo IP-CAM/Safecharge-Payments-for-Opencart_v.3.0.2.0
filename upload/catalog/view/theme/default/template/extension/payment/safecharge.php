@@ -155,7 +155,12 @@
             <?php foreach($data['payment_methods'] as $payment_method): ?>
                 <li class="dropdown apm_container">
                     <div class="apm_title">
-                        <img src="<?= str_replace('/svg/', '/svg/solid-white/', @$payment_method['logoURL']); ?>" alt="<?= @$payment_method['paymentMethodDisplayName'][0]['message'] ?>" />
+                        <?php if('cc_card' == $payment_method['paymentMethod']): ?>
+							<img src="catalog/view/theme/default/image/visa_mc_maestro.svg" alt="<?= @$payment_method['paymentMethodDisplayName'][0]['message'] ?>" style="height: 36px;" />
+						<?php else: ?>
+							<img src="<?= str_replace('/svg/', '/svg/solid-white/', @$payment_method['logoURL']); ?>" alt="<?= @$payment_method['paymentMethodDisplayName'][0]['message'] ?>" />
+						<?php endif; ?>
+						
                         <input type="radio" id="sc_payment_method_<?= $payment_method['paymentMethod'] ?>" class="sc_payment_method_field hide" name="payment_method_sc" value="<?= $payment_method['paymentMethod'] ?>" />
                         <i class="fa fa-check hide" aria-hidden="true"></i>
                     </div>
@@ -221,9 +226,9 @@
         scData.env = 'test';
     <?php endif; ?>
     
-	var scCard				= null;
-	var sfc					= null;
-	var selectedPM          = '';
+	var scCard		= null;
+	var sfc			= null;
+	var selectedPM	= '';
 
 	/**
 	 * Function createSCFields
