@@ -80,7 +80,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			'deviceDetails'     => SC_CLASS::get_device_details(),
 			'userTokenId'       => $order_info['email'],
 			'billingAddress'    => array(
-				'country' => urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_iso_code_2'])),
+				'country'	=> urlencode(preg_replace("/[[:punct:]]/", '', $order_info['payment_iso_code_2'])),
+				'email'		=> $order_info['email'],
 			),
 			'webMasterId'       => 'OpenCart ' . VERSION,
 			'paymentOption'		=> ['card' => ['threeD' => ['isDynamic3D' => 1]]],
