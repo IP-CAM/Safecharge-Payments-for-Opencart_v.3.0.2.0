@@ -18,6 +18,15 @@ class SafeChargeVersionResolver
 		
         return 'token';
     }
+	
+    public static function get_source_application()
+    {
+        if (version_compare(VERSION, '3.0.0.0', '>')) {
+            return 'OPENCART_3_0_PLUGIN';
+        }
+		
+        return 'OPENCART_2_3_PLUGIN';
+    }
     
     public static function get_ctr_file_path()
     {

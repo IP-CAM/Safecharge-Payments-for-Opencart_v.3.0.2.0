@@ -217,9 +217,10 @@
 
 <script type="text/javascript">
     var scData = {
-        merchantSiteId	: "<?= $data['merchantSiteId']; ?>",
-        merchantId		: "<?= $data['merchantId']; ?>",
-        sessionToken	: "<?= @$data['sessionToken'] ?>",
+        merchantSiteId		: "<?= $data['merchantSiteId']; ?>",
+        merchantId			: "<?= $data['merchantId']; ?>",
+        sessionToken		: "<?= @$data['sessionToken']; ?>",
+        sourceApplication	: "<?= @$data['sourceApplication']; ?>"
     };
     
     <?php if(@$data['sc_test_env'] == 'yes'): ?>
@@ -330,9 +331,7 @@
                         else if(resp.result == 'DECLINED') {
                             alert("<?= $data['sc_order_declined']; ?>");
 							
-							$('#sc_validate_submit_btn')
-								.prop('disabled', false)
-								.val("<?= @$data['button_confirm']; ?>");
+							scOpenNewOrder();
                         }
                         else {
                             if(resp.errorDescription != 'undefined' && resp.errorDescription !== '') {
@@ -404,6 +403,31 @@
 			scFormFalse();
 			return;
 		}
+	}
+	
+	function scOpenNewOrder() {
+		$.ajax({
+			url: 'index.php?route=<?= $data['ctr_path']; ?>',
+			type: 'post',
+			dataType: 'json'
+		})
+		.done(function(resp) {
+			if('success' == resp.status) {
+				// clean old data
+				scData.sessionToken = resp.sessionToken;
+				scCard = null;
+				$('#card-field-placeholder').html('');
+				
+				createSCFields();
+				
+				$('#sc_validate_submit_btn')
+					.prop('disabled', false)
+					.val("<?= @$data['button_confirm']; ?>");
+			}
+			else {
+				window.location.reload();
+			}
+		});
 	}
 
 	function scFormFalse() {

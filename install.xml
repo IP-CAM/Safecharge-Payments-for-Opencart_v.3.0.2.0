@@ -2,7 +2,7 @@
 <modification>
     <name>SC Modification</name>
     <code>SafeCharge</code>
-    <version>1.3</version>
+    <version>1.4</version>
     <author>SafeCharge</author>
     <link>https://www.safecharge.com/</link>
     
@@ -12,7 +12,8 @@
             <search><![CDATA[
                 $data['scripts'] = $this->document->getScripts('header');
             ]]></search>
-            <add position="before"><![CDATA[
+            
+			<add position="before"><![CDATA[
                 $this->document->addScript('https://cdn.safecharge.com/safecharge_resources/v1/websdk/safecharge.js');
             ]]></add>
         </operation>
@@ -21,8 +22,11 @@
     <!-- get the SC GW Settings and replace view file if there are SC GW Settings, info() -->
     <file path="admin/controller/sale/order.php">
         <operation>
-            <search><![CDATA[$this->response->setOutput($this->load->view('sale/order_info', $data));]]></search>
-            <add position="replace"><![CDATA[
+            <search><![CDATA[
+				$this->response->setOutput($this->load->view('sale/order_info', $data));
+			]]></search>
+			
+            <add position="before"><![CDATA[
                 // SC Modification
                 $this->load->model('setting/setting');
                 $sc_gw_settings = array();
@@ -47,9 +51,8 @@
                     require_once DIR_SYSTEM. 'library' .DIRECTORY_SEPARATOR
                         . 'safecharge'. DIRECTORY_SEPARATOR. 'sc_version_resolver.php';
                 
-                    $data['token_name'] = SafeChargeVersionResolver::get_token_name();
-                    $data['ctr_path'] = SafeChargeVersionResolver::get_ctr_file_path();
-                    
+                    $data['token_name']			= SafeChargeVersionResolver::get_token_name();
+                    $data['ctr_path']			= SafeChargeVersionResolver::get_ctr_file_path();
                     $data['order_resp_tr_type'] = '';
                     $data['remainingTotal']     = $order_info['total'];
                 
@@ -89,16 +92,24 @@
                             $order_info['currency_value']
                         );
                     }
-
-                    $this->response->setOutput($this->load->view('extension/sale/sc_order_info', $data));
-                }
-                else {
-                    $this->response->setOutput($this->load->view('sale/order_info', $data));
                 }
                 // SC Modification END
             ]]></add>
         </operation>
     </file>
+	
+	<!-- modify sale/order_info.twig file -->
+	<file path="admin/view/template/sale/order_info.twig">
+		<operation>
+			<search><![CDATA[
+                <script type="text/javascript"><!--
+            ]]></search>
+			
+			<add position="before"><![CDATA[
+				{% include '/extension/sale/sc_order_info_changes.twig' %}
+			]]></add>
+		</operation>
+	</file>
     
     <!-- modify file again to preview net Total (after refunds) in the Orders list -->
     <file path="admin/controller/sale/order.php">

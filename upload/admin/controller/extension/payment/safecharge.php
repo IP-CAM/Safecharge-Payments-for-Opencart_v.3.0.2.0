@@ -25,7 +25,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 
                 PRIMARY KEY (`id`),
                 KEY `orderId` (`orderId`),
-                KEY `approved` (`approved`)
+                KEY `approved` (`approved`),
+				UNIQUE KEY `transactionId` (`transactionId`)
               ) ENGINE=MyISAM DEFAULT CHARSET=utf8;";
         
         $this->db->query($q);
@@ -253,9 +254,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         // check for POST and set local variables by it END
         
         // set output
-        $data['header'] = $this->load->controller('common/header');
-        $data['column_left'] = $this->load->controller('common/column_left');
-        $data['footer'] = $this->load->controller('common/footer');
+        $data['header']			= $this->load->controller('common/header');
+        $data['column_left']	= $this->load->controller('common/column_left');
+        $data['footer']			= $this->load->controller('common/footer');
         
         // load common php template and then pass it to the real template
         // as single variable. The form is same for both versions
@@ -272,7 +273,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     private function ajax_call()
     {
-        SC_CLASS::create_log($this->request->post['action'], 'ajax_call(): ');
+        SC_CLASS::create_log('ajax_call(): ' . $this->request->post['action']);
         
         try {
             $action = $this->request->post['action'];
@@ -403,7 +404,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			'merchantId'            => $settings['merchantId'],
 			'merchantSiteId'        => $settings['merchantSiteId'],
 			'clientRequestId'       => $time . '_' . $payment_custom_fields[SC_GW_TRANS_ID_KEY],
-			'clientUniqueId'        => $order_id,
+			'clientUniqueId'        => $clientUniqueId,
 			'amount'                => $this->request->post['amount'],
 			'currency'              => $order_info['currency_code'],
 			'relatedTransactionId'  => $payment_custom_fields[SC_GW_TRANS_ID_KEY], // GW Transaction ID
@@ -413,7 +414,22 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			'timeStamp'             => $time,
 		);
 		
-		$refund_url = 'yes' == $settings['test'] ? SC_TEST_CPANEL_URL : SC_LIVE_REFUND_URL;
+		$checksum_str = implode('', $ref_parameters);
+		
+		$checksum = hash(
+			$settings['hash_type'],
+			$checksum_str . $settings['secret']
+		);
+		
+		$ref_parameters['checksum']          = $checksum;
+		$ref_parameters['urlDetails']        = array('notificationUrl' => $notify_url);
+		$ref_parameters['sourceApplication'] = SafeChargeVersionResolver::get_source_application();
+		
+		if(defined('VERSION')) {
+            $ref_parameters['webMasterId'] = 'OpenCart ' . VERSION;
+        }
+		
+		$refund_url = 'yes' == $settings['test'] ? SC_TEST_REFUND_URL : SC_LIVE_REFUND_URL;
 		
 		$resp = SC_CLASS::call_rest_api($refund_url, $ref_parameters);	
 			
@@ -553,6 +569,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'authCode'              => $payment_custom_fields[SC_AUTH_CODE_KEY],
             'urlDetails'            => array('notificationUrl' => $notify_url),
             'timeStamp'             => $time,
+            'sourceApplication'     => SafeChargeVersionResolver::get_source_application(),
         );
         
         if(defined('VERSION')) {
