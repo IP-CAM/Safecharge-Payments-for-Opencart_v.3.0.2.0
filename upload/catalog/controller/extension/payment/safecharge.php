@@ -158,10 +158,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         $this->load->model('checkout/order');
         
-        $arr = explode("_", @$_REQUEST['invoice_id']);
-		$order_id  = $arr[0];
-		$order_info = $this->model_checkout_order->getOrder($order_id);
-        $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+        $arr			= explode("_", @$_REQUEST['invoice_id']);
+		$order_id		= $arr[0];
+		$order_info		= $this->model_checkout_order->getOrder($order_id);
+        $settigs_prefix	= SafeChargeVersionResolver::get_settings_prefix();
         
         if($order_info && $order_info['order_status_id'] == '0') {
             $message =
@@ -208,36 +208,59 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 	public function callback()
     {
         SC_CLASS::create_log(@$_REQUEST, 'DMN request: ');
+		
+		if(empty($_REQUEST['transactionType'])) {
+			SC_CLASS::create_log('DMN report: Transaction Type is empty');
+			echo 'DMN report: Transaction Type is empty';
+            exit;
+		}
+		
+		// get the status from the request
+        $req_status = $this->get_request_status();
+		
+		if('pending' == strtolower($req_status)) {
+			SC_CLASS::create_log('DMN status is Pending. Wait for another status.');
+			echo 'DMN status is Pending. Wait for another status.';
+			exit;
+		}
+		
+		if(empty($req_status)) {
+			SC_CLASS::create_log('DMN report: the Status parameter is empty.');
+			echo 'DMN report: the Status parameter is empty.';
+            exit;
+		}
         
         if(!$this->checkAdvancedCheckSum()) {
-            SC_CLASS::create_log('', 'DMN report: You receive DMN from not trusted source. The process ends here.');
+            SC_CLASS::create_log('DMN report: You receive DMN from not trusted source. The process ends here.');
+			echo 'DMN report: You receive DMN from not trusted source. The process ends here.';
             exit;
         }
         
         $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
         
-        // get the status from the request
-        $req_status = $this->get_request_status();
         $this->load->model('checkout/order');
+		
+		SC_CLASS::create_log($_REQUEST['transactionType']);
         
         # Sale and Auth
         if(
             isset($_REQUEST['transactionType'], $_REQUEST['invoice_id'])
             && in_array($_REQUEST['transactionType'], array('Sale', 'Auth'))
         ) {
-            SC_CLASS::create_log('REST sale.');
-            
 			$order_id = 0;
             
 			try {
 				$order_id = intval(@$_REQUEST['merchant_unique_id']);
                 $order_info = $this->model_checkout_order->getOrder($order_id);
                 
-                $this->update_custom_payment_fields($order_id);
-
-                // 5 => Complete
                 $order_status_id = intval($order_info['order_status_id']);
+				
+				SC_CLASS::create_log($order_status_id, 'Current Order status:');
+				SC_CLASS::create_log($req_status, 'Incoming Order status:');
+				
+				// 5 => Complete
                 if($order_status_id != 5) {
+					$this->update_custom_payment_fields($order_id);
                     $this->change_order_status($order_id, $req_status, $_REQUEST['transactionType']);
                 }
             }
@@ -251,23 +274,37 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
+		if(!empty($_REQUEST['order_id'])) {
+			$order_id = intval($_REQUEST['order_id']);
+		}
+		else {
+			$relatedTransactionId = filter_var($_REQUEST['relatedTransactionId'], FILTER_VALIDATE_INT);
+			
+			$q = 'SELECT order_id FROM ' . DB_PREFIX . 'order '
+                . 'WHERE payment_custom_field LIKE \'%"' . SC_GW_TRANS_ID_KEY . '":"' . $relatedTransactionId . '"%\'';
+			
+			$query = $this->db->query($q);
+			
+			SC_CLASS::create_log($q, 'Search for Order ID');
+
+            $order_id = $query->row['order_id'];
+		}
+		
         # Refund
         // see https://www.safecharge.com/docs/API/?json#refundTransaction -> Output Parameters
         // when we refund form CPanel we get transactionType = Credit and Status = 'APPROVED'
         if(
-            (@$_REQUEST['action'] == 'refund'
-                || in_array(@$_REQUEST['transactionType'], array('Credit', 'Refund')))
-            && !empty($req_status)
+			!empty($order_id)
+            && @$_REQUEST['action'] == 'refund'
+			|| in_array($_REQUEST['transactionType'], array('Credit', 'Refund'))
         ) {
-            SC_CLASS::create_log('OpenCart Refund DMN.');
-            
-            $order_info = $this->model_checkout_order->getOrder(@$_REQUEST['order_id']);
+            $order_info = $this->model_checkout_order->getOrder($order_id);
             
             if(!$order_info) {
                 SC_CLASS::create_log($order_info, 'There is no order info: ');
                     
                 $this->model_checkout_order->addOrderHistory(
-                    @$_REQUEST['order_id'],
+                    $order_id,
                     $this->config->get($settigs_prefix . 'order_status_id'),
                     'Missing Order info for this Order ID.',
                     false
@@ -278,7 +315,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             }
             
 
-            $this->change_order_status(intval(@$_REQUEST['order_id']), $req_status, 'Credit');
+            $this->change_order_status($order_id, $req_status, 'Credit');
             
             echo 'DMN received.';
             exit;
@@ -286,20 +323,17 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         # Void, Settle
         if(
-            isset($_REQUEST['order_id'], $_REQUEST['transactionType'])
-            && $_REQUEST['order_id'] != ''
+            !empty($order_id)
             && in_array($_REQUEST['transactionType'], array('Void', 'Settle'))
         ) {
-            SC_CLASS::create_log($_REQUEST['transactionType'], 'Void/Settle transactionType: ');
-            
             try {
-                $order_info = $this->model_checkout_order->getOrder($_REQUEST['order_id']);
+                $order_info = $this->model_checkout_order->getOrder($order_id);
                 
                 if($_REQUEST['transactionType'] == 'Settle') {
-                    $this->update_custom_payment_fields($_REQUEST['order_id']);
+                    $this->update_custom_payment_fields($order_id);
                 }
                 
-                $this->change_order_status(intval(@$_REQUEST['order_id']), $req_status, $_REQUEST['transactionType']);
+                $this->change_order_status(intval($order_id), $req_status, $_REQUEST['transactionType']);
             }
             catch (Exception $ex) {
                 SC_CLASS::create_log(
@@ -307,11 +341,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                     'callback() Void/Settle Exception: '
                 );
             }
+			
+			echo 'DMN received.';
+            exit;
         }
         
-        SC_CLASS::create_log('', 'Callback end. ');
-        
-        echo 'DMN received.';
+        echo 'DMN was not recognized!';
         exit;
 	}
     
@@ -489,8 +524,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 
 		if($this->get_request_status($resp) == 'SUCCESS') {
 			// in case we have redirectURL
-			if(isset($resp['redirectURL']) && !empty($resp['redirectURL'])) {
-				$this->response->redirect($data['redirectURL']);
+			if(!empty($resp['redirectURL'])) {
+				$this->response->redirect($resp['redirectURL']);
 			}
 		}
 
@@ -645,9 +680,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         switch($status) {
             case 'CANCELED':
-                $message = $this->language->get('Your request was Canceld') . '. '
-                    . 'PPP_TransactionID = ' . @$request['PPP_TransactionID']
-                    . ", Status = " . $status . ', GW_TransactionID = '
+                $message = $this->language->get('Your request was Canceld') . '.<br/>'
+                    . 'Payment Method = ' . @$request['payment_method']
+                    . '<br/>PPP_TransactionID = ' . @$request['PPP_TransactionID']
+                    . "<br/>Status = " . $status . ',<br/>GW_TransactionID = '
                     . @$request['TransactionID'];
 
                 $status_id = $order_info['order_status_id'];
@@ -693,7 +729,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         }
                         
                         // to the sum of approved refund add current Refund amount
-                        $refs_sum += $curr_refund_amount;
+						/** TODO because of bug, only cc_card provide correct Refund Amount */
+						if('cc_card' == @$_REQUEST['payment_method']) {
+							$refs_sum += $curr_refund_amount;
+						}
 
                         $send_message = false;
                         $status_id = $order_info['order_status_id'];
@@ -706,15 +745,20 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                                 . "order SET order_status_id = 11 WHERE order_id = {$order_id};");
                         }
                         
-                        $formated_refund = $this->currency->format(
-                            $curr_refund_amount,
-                            $order_info['currency_code'],
-                            $order_info['currency_value']
-                        );
-
                         $message = 'DMN message: Your Refund with Transaction ID #'
-                            . @$_REQUEST['TransactionID'] .' and Refund Amount: -' . $formated_refund
-                            . ' was APPROVED.';
+                            . @$_REQUEST['TransactionID'];
+						
+						if(is_numeric(@$request['clientUniqueId'])) {
+							$formated_refund = $this->currency->format(
+								$curr_refund_amount,
+								$order_info['currency_code'],
+								$order_info['currency_value']
+							);
+							
+							$message .= ' and Refund Amount: -' . $formated_refund;
+						}
+						
+						$message .= ' was APPROVED.';
 
                         # update Refund data into the DB
 						$q = "UPDATE sc_refunds SET "
@@ -738,7 +782,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $status_id = 5; // Complete
                 
                 if($transactionType == 'Auth') {
-                    $message = 'The amount has been authorized and wait to for Settle. ';
+                    $message = 'The amount has been authorized and wait for Settle. ';
                     $status_id = $this->config->get($settigs_prefix . 'pending_status_id');
                 }
                 elseif($transactionType == 'Settle') {
@@ -750,14 +794,18 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                         . "order SET order_status_id = 5 WHERE order_id = {$order_id};");
                 }
                 
-                $message .= 'PPP_TransactionID = ' . @$request['PPP_TransactionID']
-                    . ", Status = ". $status;
+				$message .= '<br/>Transaction ID = '. @$request['TransactionID']
+					.'<br/>Related Transaction ID = '. @$request['relatedTransactionId']
+					. '<br/>PPP_TransactionID = ' . @$request['PPP_TransactionID']
+                    . "<br/>Status = ". $status;
                 
                 if($transactionType) {
-                    $message .= ", TransactionType = ". $transactionType;
+                    $message .= "<br/>Transaction Type = ". $transactionType;
                 }
-                
-                $message .= ', GW_TransactionID = '. @$request['TransactionID'];
+				
+                if(!empty($request['payment_method'])) {
+                    $message .= "<br/>Payment Method = ". $request['payment_method'];
+                }
                 
                 break;
 
@@ -800,15 +848,20 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 
                 // Refund
                 if($transactionType == 'Credit') {
-                    $formated_refund = $this->currency->format(
-                        @$_REQUEST['totalAmount'],
-                        $order_info['currency_code'],
-                        $order_info['currency_value']
-                    );
-                    
                     $message = 'DMN message: Your Refund with Transaction ID #'
-                        . @$_REQUEST['clientUniqueId'] .' and Refund Amount: ' . @$formated_refund
-                        . ' ' . @$_REQUEST['requestedCurrency'] . ' was fail.';
+                        . @$_REQUEST['TransactionID'];
+					
+					if(is_numeric(@$request['clientUniqueId'])) {
+						$formated_refund = $this->currency->format(
+							@$_REQUEST['totalAmount'],
+							$order_info['currency_code'],
+							$order_info['currency_value']
+						);
+						
+						$message .= ' and Refund Amount: ' . @$formated_refund;
+					}
+					
+					$message .= ' was fail.';
                     
                     if(@$_REQUEST['Reason']) {
                         $message .= ' Reason: ' . $_REQUEST['Reason'] . '.';
@@ -828,13 +881,16 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 $status_id = $this->config->get($settigs_prefix . 'failed_status_id');
                 break;
 
+			/** TODO Remove it. We stop process in the beginning when status is Pending */
             case 'PENDING':
-                $status_id = $this->config->get($settigs_prefix . 'pending_status_id');
-                
+				SC_CLASS::create_log($order_info['order_status_id'], 'Order status is:');
+				
                 if ($order_info['order_status_id'] == '5' || $order_info['order_status_id'] == '15') {
                     $status_id = $order_info['order_status_id'];
                     break;
                 }
+				
+				$status_id = $this->config->get($settigs_prefix . 'pending_status_id');
                 
                 $message = 'Payment is still pending, PPP_TransactionID '
                     . @$request['PPP_TransactionID'] . ", Status = " . $status;

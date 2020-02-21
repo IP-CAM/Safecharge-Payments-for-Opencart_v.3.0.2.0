@@ -27,7 +27,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 KEY `orderId` (`orderId`),
                 KEY `approved` (`approved`),
 				UNIQUE KEY `transactionId` (`transactionId`)
-              ) ENGINE=MyISAM DEFAULT CHARSET=utf8;";
+              ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+			
+			CREATE UNIQUE INDEX ref_per_order ON sc_refunds (orderId, transactionId);";
         
         $this->db->query($q);
         
@@ -39,7 +41,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             foreach($resp->rows as $field) {
                 if($field['Field'] == 'order_status_id') {
                     if(intval($field['Default']) == 0) {
-                        $q = "ALTER TABLE `". DB_PREFIX ."order` CHANGE `order_status_id` `order_status_id` INT(11) NOT NULL DEFAULT '1';";
+                        $q = "ALTER TABLE `". DB_PREFIX ."order` CHANGE `order_status_id` "
+							. "`order_status_id` INT(11) NOT NULL DEFAULT '1';";
                         $this->db->query($q);
                     }
                     
@@ -145,7 +148,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         // get settings
         $xtsettings = $this->model_setting_setting->getSetting(trim($settigs_prefix, '_'));
-        
+		
 		$data['breadcrumbs'][] = array(
 			'text' => $data['text_home'],
 			'href' => $this->url->link(
@@ -194,6 +197,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             'ppp_Merchant_Site_ID',
             'secret',
             'hash_type',
+            'payment_action',
             'test_mode',
             'force_http',
             'create_logs',
@@ -318,9 +322,15 @@ class ControllerExtensionPaymentSafeCharge extends Controller
     
     private function order_refund($order_id, $is_manual = false)
     {
-        $request_amoutn = floatval($this->request->post['amount']);
-        
-        if($request_amoutn <= 0) {
+		// get GW settings
+        $settings					= $this->get_gw_settings();
+		$_SESSION['create_logs']	= $this->session->data['create_logs']
+									= $settings['create_log'];
+		$request_amount				= floatval($this->request->post['amount']);
+		
+		SC_CLASS::create_log($order_id, 'Refund for Order #');
+		
+        if($request_amount <= 0) {
             echo json_encode(array('status' => 0, 'msg' => 'The Refund Amount must be greater than 0!'));
             exit;
         }
@@ -340,34 +350,39 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             }
         }
             
-        if(round($remaining_ref_amound, 2) < round($request_amoutn, 2)) {
+        if(round($remaining_ref_amound, 2) < round($request_amount, 2)) {
             echo json_encode(array('status' => 0, 'msg' => 'Refunds sum exceeds Order Amount'));
             exit;
         }
         
-        // get GW settings
-        $settings = $this->get_gw_settings();
-        
         if($is_manual) {
-            $ref_data = date('Y-m-d H:i:s', time());
+			SC_CLASS::create_log('Manual Refund.');
+			
+            $ref_data	= date('Y-m-d H:i:s', time());
+            $ref_id		= time();
             
-            $ref_id = uniqid();
-            
+			// transaction id must be unique
             $this->db->query(
-                "INSERT INTO sc_refunds (orderId, clientUniqueId, amount, approved) "
-                . "VALUES (".intval($order_id).", '{$ref_id}', {$request_amoutn}, 1);"
+                "INSERT INTO sc_refunds (orderId, clientUniqueId, amount, transactionId, approved) "
+                . "VALUES (".intval($order_id).", '{$ref_id}', {$request_amount}, '{$ref_id}', 1);"
             );
             
             $order_status = $order_info['order_status_id'];
-            if(round($remaining_ref_amound, 2) == round($request_amoutn, 2)) {
+            if(round($remaining_ref_amound, 2) == round($request_amount, 2)) {
                 $order_status = 11; // refunded
             }
             
             SC_CLASS::create_log($order_status, '$order_status: ');
             
+			$formated_refund = $this->currency->format(
+				$request_amount,
+				$order_info['currency_code'],
+				$order_info['currency_value']
+			);
+			
             $this->db->query(
                 "INSERT INTO " . DB_PREFIX ."order_history (order_id, order_status_id, notify, comment, date_added) "
-                . "VALUES ({$order_id}, {$order_status}, 0, 'Your Manual Refund #{$ref_id} was created.', '{$ref_data}');"
+				. "VALUES ({$order_id}, {$order_status}, 0, 'Your Manual Refund #{$ref_id}, for about <b>{$formated_refund}</b> was created.', '{$ref_data}');"
             );
                 
             $this->db->query("UPDATE " . DB_PREFIX ."order SET order_status_id = {$order_status} WHERE order_id = {$order_id};");
@@ -376,7 +391,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
-        $_SESSION['create_logs'] = $this->session->data['create_logs'] = $settings['create_log'];
         $clientUniqueId = uniqid();
         
         $notify_url = $this->url->link(
@@ -506,7 +520,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         $msg = 'Request Refund #' . $clientUniqueId . ', was sent. Please, wait for DMN!';
         
         $order_status = $order_info['order_status_id'];
-        if($remaining_ref_amound == $request_amoutn) {
+        if($remaining_ref_amound == $request_amount) {
             $order_status = 11; // refunded
         }
         

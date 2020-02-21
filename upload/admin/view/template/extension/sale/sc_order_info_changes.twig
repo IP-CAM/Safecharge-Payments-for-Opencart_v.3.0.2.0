@@ -1,199 +1,213 @@
 <script type="text/javascript">
-		// SafeCharge JS
-        function scOrderActions(confirmQusetion, action, orderId) {
-            var reg = new RegExp(/^\d+(\.\d{1,2})?$/); // match integers and decimals
-            var refAm = $('#refund_amount').val();
+	// SafeCharge JS
+	function scOrderActions(confirmQusetion, action, orderId) {
+		console.log(action);
 
-            if(action == 'refund' || action == 'refundManual') { 
-                if(!reg.test(refAm) || isNaN(refAm) || refAm <= 0) {
-                    alert('{{ sc_refund_amount_error }}');
-                    return;
-                }
-            }
+		if('refund' == action) {
+			var refAm	= $('#refund_amount').val().replace(',', '.');
+			var reg		= new RegExp(/^\d+(\.\d{1,2})?$/); // match integers and decimals
 
-            if(confirm(confirmQusetion + ' #' + orderId + '?')) {
-                var spinnerId = (action == 'void' ? 'void' : 'refund') + '_spinner';
-                $('#' + spinnerId).removeClass('hide');
-                // disable sc custom buttons
-                $('.sc_order_btns').each(function(){
-                    $(this).attr('disabled', true);
-                });
+			if(action == 'refund' || action == 'refundManual') { 
+				if(!reg.test(refAm) || isNaN(refAm) || refAm <= 0) {
+					alert('{{ sc_refund_amount_error }}');
+					return;
+				}
+			}
+		}
 
-                $.ajax({
-                    url: 'index.php?route={{ ctr_path }}&{{ token_name }}='+window.getURLVar('{{ token_name }}'),
-                    type: 'post',
-                    dataType: 'json',
-                    data: {
-                        orderId: orderId
-                        ,action: action
-                        ,amount: $('#refund_amount').val()
-                    }
-                })
-                .done(function(resp) {
-                    if(resp.status == 0 && typeof resp.msg != 'undefined') {
-                        alert(resp.msg);
-                    }
-                    else {
-                        window.location.href = window.location.toString().replace('/info', '');
-                    }
-                    
-                    $('#' + spinnerId).addClass('hide');
-                    // disable sc custom buttons
-                    $('.sc_order_btns').each(function(){
-                        $(this).attr('disabled', false);
-                    });
-                });
-            }
-        }
-        
-        function deleteManualRefund(id, amount) {
-            if(confirm("Are you sure you want to delete this Manual Refund?")) {
-                $('#sc_refund_' + id).find('.fa-circle-o-notch').removeClass('hide');
-                $('#sc_refund_' + id).find('button').addClass('hide');
-                
-                $.ajax({
-                    url: 'index.php?route={{ ctr_path }}&{{ token_name }}='+window.getURLVar('{{ token_name }}'),
-                    type: 'post',
-                    dataType: 'json',
-                    data: {
-                        refId: id
-                        ,action: 'deleteManualRefund'
-                        ,amount: amount
-                    }
-                })
-                .done(function(resp) {
-                    if(resp.success) {
-                        $('#sc_refund_' + id).remove();
+		if(confirm(confirmQusetion + ' #' + orderId + '?')) {
+			var spinnerId = (action == 'void' ? 'void' : 'refund') + '_spinner';
+			$('#' + spinnerId).removeClass('hide');
+			// disable sc custom buttons
+			$('.sc_order_btns').each(function(){
+				$(this).attr('disabled', true);
+			});
 
-                        var totRefParts = $('#sc_total_refund').html().split('-');
-                        var newTotRef = parseFloat(totRefParts[1]) - amount;
+			$.ajax({
+				url: 'index.php?route={{ ctr_path }}&{{ token_name }}='+window.getURLVar('{{ token_name }}'),
+				type: 'post',
+				dataType: 'json',
+				data: {
+					orderId: orderId
+					,action: action
+					,amount: $('#refund_amount').val()
+				}
+			})
+			.done(function(resp) {
+				if(resp.status == 0 && typeof resp.msg != 'undefined') {
+					alert(resp.msg);
+				}
+				else {
+					window.location.href = window.location.toString().replace('/info', '');
+				}
 
-                        $('#sc_total_refund').html(totRefParts[0] + '-' + newTotRef.toFixed(2));
-                    }
-                    else {
-                        $('#sc_refund_' + id).find('.fa-circle-o-notch').addClass('hide');
-                        $('#sc_refund_' + id).find('button').removeClass('hide');
+				$('#' + spinnerId).addClass('hide');
+				// disable sc custom buttons
+				$('.sc_order_btns').each(function(){
+					$(this).attr('disabled', false);
+				});
+			});
+		}
+	}
 
-                        alert(resp.msg);
-                    }
-                });
-            }
-        }
-        
-		$(function(){
-			// 1.set the changes in Options table
-			var scPlaceOne = $('#content .container-fluid .row .col-md-4:nth-child(3)').find('table tbody');
-			
-			if(scPlaceOne.length > 0) {
-				// 1.1.place Refund button
-				{% if 
-                    order_status_id == 5
-                    and (paymentMethod in ["cc_card", "dc_card", "apmgw_expresscheckout"]) 
-                    and remainingTotal|number_format(2, '.', '') > 0
-                %}
-					scPlaceOne.append(
-						'<tr class="sc_rows">'
-							+ '<td class="text-left" colspan="3">'
-								+ '<span>{{ sc_refund_amount }}&nbsp;&nbsp;<i id="refund_spinner" class="fa fa-circle-o-notch fa-spin hide"></i></span>'
-								+ '<div class="input-group pull-right" style="max-width:70%;">'
-									+ '<input type="text" class="form-control" style="height: 22px; padding: 2px 5px; padding: 2px 5px; line-height: 1.5; border-radius: 3px;" id="refund_amount" value="" />'
-									+ '<span class="input-group-btn">'
-										+ '<button class="btn btn-danger btn-xs sc_order_btns" type="button" onclick="scOrderActions(\'{{ sc_order_confirm_refund }}\', \'refundManual\', {{ order_id }})">{{ sc_btn_manual_refund }}</button>'
-										+ '<button class="btn btn-danger btn-xs sc_order_btns" type="button" onclick="scOrderActions(\'{{ sc_order_confirm_refund }}\', \'refund\', {{ order_id }})">{{ sc_btn_refund }}</button>'
-								   + '</span>'
-								+ '</div>'
-							+ '</td>'
-						+ '</tr>'
-					);
-				{% endif %}
-				// place Refund button END
-				
-				// 1.2.set Void btn
-				var scVoidButton = '';
-				
-				{% if
-					(order_status_id in [5, 1])
-					and (paymentMethod in ["cc_card",  "dc_card"]) 
-					and refunds is empty
-				%}
-					scVoidButton = '<button class="btn btn-danger btn-xs sc_order_btns" onclick="scOrderActions(\'{{ sc_order_confirm_cancel }}\', \'void\', {{ order_id }})">{{ sc_btn_void }}</button>';
-				{% endif %}
-				// set Void btn END
-				
-				// 1.3.set Settle btn
-				var scSettleButton = '';
-				
-				{% if order_status_id == 1 and order_resp_tr_type == 'Auth' %}
-					scSettleButton = '<button class="btn btn-success btn-xs sc_order_btns" onclick="scOrderActions(\'{{ sc_order_confirm_settle }}\', \'settle\', {{ order_id }})">{{ sc_btn_settle }}</button>';
-				{% endif %}
-				// set Settle btn END
-				
-				// 1.4.place Settle and Void button
-				scPlaceOne.append(
+	function deleteManualRefund(id, amount) {
+		if(confirm("Are you sure you want to delete this Manual Refund?")) {
+			$('#sc_refund_' + id).find('.fa-circle-o-notch').removeClass('hide');
+			$('#sc_refund_' + id).find('button').addClass('hide');
+
+			$.ajax({
+				url: 'index.php?route={{ ctr_path }}&{{ token_name }}='+window.getURLVar('{{ token_name }}'),
+				type: 'post',
+				dataType: 'json',
+				data: {
+					refId: id
+					,action: 'deleteManualRefund'
+					,amount: amount
+				}
+			})
+			.done(function(resp) {
+				if(resp.success) {
+					$('#sc_refund_' + id).remove();
+
+					var totRefParts = $('#sc_total_refund').html().split('-');
+					var newTotRef = parseFloat(totRefParts[1]) - amount;
+
+					$('#sc_total_refund').html(totRefParts[0] + '-' + newTotRef.toFixed(2));
+				}
+				else {
+					$('#sc_refund_' + id).find('.fa-circle-o-notch').addClass('hide');
+					$('#sc_refund_' + id).find('button').removeClass('hide');
+
+					alert(resp.msg);
+				}
+			});
+		}
+	}
+
+	$(function(){
+		// 1.set the changes in Options table
+		var scPlaceOne = $('#content .container-fluid .row .col-md-4:nth-child(3)').find('table tbody');
+
+		if(scPlaceOne.length > 0) {
+			// 1.1.place Refund button
+			{% if 
+				(order_status_id in [5, 11])
+				and (paymentMethod in ["cc_card", "dc_card", "apmgw_expresscheckout"]) 
+				and remainingTotal|number_format(2, '.', '') > 0
+			%}
+				var scRefundBtnsHtml = 
 					'<tr class="sc_rows">'
 						+ '<td class="text-left" colspan="3">'
-							+ '<span>{{ sc_more_actions }}&nbsp;&nbsp;<i id="void_spinner" class="fa fa-circle-o-notch fa-spin hide"></i></span>'
-							+ '<div class="btn-group pull-right">'
-								+ scVoidButton
-								+ scSettleButton
+							+ '<span>{{ sc_refund_amount }}&nbsp;&nbsp;<i id="refund_spinner" class="fa fa-circle-o-notch fa-spin hide"></i></span>'
+							+ '<div class="input-group pull-right" style="max-width:70%;">'
+								+ '<input type="text" class="form-control" style="height: 22px; padding: 2px 5px; padding: 2px 5px; line-height: 1.5; border-radius: 3px;" id="refund_amount" value="" />'
+								+ '<span class="input-group-btn">'
+										+ '<button id="sc_manual_refund_btn" class="btn btn-danger btn-xs sc_order_btns" type="button" onclick="scOrderActions(\'{{ sc_order_confirm_refund }}\', \'refundManual\', {{ order_id }})">{{ sc_btn_manual_refund }}</button>';
+						
+				{% if order_status_id == 5 %}
+					// add SC Refund button only when order is Complete (paid)
+					scRefundBtnsHtml +=
+										'<button class="btn btn-danger btn-xs sc_order_btns" type="button" onclick="scOrderActions(\'{{ sc_order_confirm_refund }}\', \'refund\', {{ order_id }})">{{ sc_btn_refund }}</button>';
+				{% endif %}
+						
+				scRefundBtnsHtml += 		
+								'</span>'
 							+ '</div>'
 						+ '</td>'
+					+ '</tr>';
+						
+				scPlaceOne.append(scRefundBtnsHtml);
+			{% endif %}
+			// place Refund button END
+
+			// 1.2.set Void btn
+			var scVoidButton = '';
+
+			{% if
+				(order_status_id in [5, 1])
+				and (paymentMethod in ["cc_card",  "dc_card"]) 
+				and refunds is empty
+			%}
+				scVoidButton = '<button class="btn btn-danger btn-xs sc_order_btns" onclick="scOrderActions(\'{{ sc_order_confirm_cancel }}\', \'void\', {{ order_id }})">{{ sc_btn_void }}</button>';
+			{% endif %}
+			// set Void btn END
+
+			// 1.3.set Settle btn
+			var scSettleButton = '';
+
+			{% if order_status_id == 1 and order_resp_tr_type == 'Auth' %}
+				scSettleButton = '<button class="btn btn-success btn-xs sc_order_btns" onclick="scOrderActions(\'{{ sc_order_confirm_settle }}\', \'settle\', {{ order_id }})">{{ sc_btn_settle }}</button>';
+			{% endif %}
+			// set Settle btn END
+
+			// 1.4.place Settle and Void button
+			scPlaceOne.append(
+				'<tr class="sc_rows">'
+					+ '<td class="text-left" colspan="3">'
+						+ '<span>{{ sc_more_actions }}&nbsp;&nbsp;<i id="void_spinner" class="fa fa-circle-o-notch fa-spin hide"></i></span>'
+						+ '<div class="btn-group pull-right">'
+							+ scVoidButton
+							+ scSettleButton
+						+ '</div>'
+					+ '</td>'
+				+ '</tr>'
+			);
+			// place Settle and Void button END
+		}
+		// set the changes in Options table END
+
+		// 2.add SC Refunds
+		var scPlaceTwo = $('#content .container-fluid').children('div').eq(2).find('table:nth-child(2) tbody');
+
+		if(scPlaceTwo.length > 0) {
+			{% if refunds %}
+				// 2.1 collect Refunds
+				var scRefundsRows = '';
+
+				{% for refund in refunds %}
+					scRefundsRows += 
+						'<tr id="sc_refund_{{ refund.id }}">'
+							+ '<td class="text-left">'
+								+ '{{ refund.clientUniqueId }}';
+
+					{% if not refund.transactionId %}
+						scRefundsRows +=
+								'<button type="button" class="btn btn-danger btn-xs pull-right" onclick="deleteManualRefund({{ refund.id }}, {{ refund.amount }})"><i class="fa fa-trash"></i></button>'
+								+ '<i class="fa fa-circle-o-notch fa-spin hide pull-right"></i>'
+					{% endif %}
+
+					scRefundsRows +=
+							'</td>'
+							+ '<td class="text-left">{{ refund.transactionId }}</td>'
+							+ '<td class="text-left">{{ refund.date }}</td>'
+							+ '<td class="text-right" colspan="2">{{ refund.amount_curr }}</td>'
+						+ '</tr>';
+				{% endfor %}
+				// 2.1 collect Refunds END
+
+				// 2.2.place Refunds
+				scPlaceTwo.append(
+					'<tr>'
+						+ '<td class="text-left"><strong>{{ sc_refund_id }}</strong></td>'
+						+ '<td class="text-left"><strong>Transaction ID</strong></td>'
+						+ '<td class="text-left"><strong>{{ sc_date }}</strong></td>'
+						+ '<td class="text-right" colspan="2"><strong>Refund Amount</strong></td>'
+					+ '</tr>'
+
+					+ scRefundsRows
+
+					+ '<tr>'
+						+ '<td class="text-right" colspan="4"><strong>{{ sc_remaining_total }}</strong></td>'
+						+ '<td class="text-right"><strong>{{ remainingTotalCurr }}</strong></td>'
 					+ '</tr>'
 				);
-				// place Settle and Void button END
-			}
-			// set the changes in Options table END
-			
-			// 2.add SC Refunds
-			var scPlaceTwo = $('#content .container-fluid').children('div').eq(2).find('table:nth-child(2) tbody');
-			
-			if(scPlaceTwo.length > 0) {
-				{% if refunds %}
-					// 2.1 collect Refunds
-					var scRefundsRows = '';
-					
-					{% for refund in refunds %}
-						scRefundsRows = 
-							'<tr id="sc_refund_{{ refund.id }}">'
-								+ '<td class="text-left">'
-									+ '{{ refund.clientUniqueId }}';
-							
-						{% if not refund.transactionId %}
-							scRefundsRows +=
-									'<button type="button" class="btn btn-danger btn-xs pull-right" onclick="deleteManualRefund({{ refund.id }}, {{ refund.amount }})"><i class="fa fa-trash"></i></button>'
-									+ '<i class="fa fa-circle-o-notch fa-spin hide pull-right"></i>'
-						{% endif %}
-						
-						scRefundsRows +=
-								'</td>'
-								+ '<td class="text-left">{{ refund.transactionId }}</td>'
-								+ '<td class="text-left">{{ refund.date }}</td>'
-								+ '<td class="text-right" colspan="2">{{ refund.amount_curr }}</td>'
-							+ '</tr>';
-					{% endfor %}
-					// 2.1 collect Refunds END
-					
-					console.log(scRefundsRows);
-					
-					// 2.2.place Refunds
-					scPlaceTwo.append(
-						'<tr>'
-							+ '<td class="text-left"><strong>{{ sc_refund_id }}</strong></td>'
-							+ '<td class="text-left"><strong>Transaction ID</strong></td>'
-							+ '<td class="text-left"><strong>{{ sc_date }}</strong></td>'
-							+ '<td class="text-right" colspan="2"><strong>Refund Amount</strong></td>'
-						+ '</tr>'
-
-						+ scRefundsRows
-
-						+ '<tr>'
-							+ '<td class="text-right" colspan="4"><strong>{{ sc_remaining_total }}</strong></td>'
-							+ '<td class="text-right"><strong>{{ remainingTotalCurr }}</strong></td>'
-						+ '</tr>'
-					);
+		
+				{% if remainingTotal == 0 %}
+					$('#refund_amount, #sc_manual_refund_btn').css('display', 'none');
 				{% endif %}
-			}
-			// 2.add SC Refunds END
-		});
-		// SafeCharge JS END
-	</script>
+			{% endif %}
+		}
+		// 2.add SC Refunds END
+	});
+	// SafeCharge JS END
+</script>

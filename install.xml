@@ -29,7 +29,8 @@
             <add position="before"><![CDATA[
                 // SC Modification
                 $this->load->model('setting/setting');
-                $sc_gw_settings = array();
+				
+                $sc_gw_settings	= array();
                 $setting_prefix = '';
                 
                 if(is_readable(
@@ -57,13 +58,14 @@
                     $data['remainingTotal']     = $order_info['total'];
                 
                     $query = $this->db->query('SELECT * FROM sc_refunds WHERE approved = 1 AND orderId = ' . intval($order_id));
-                    if(@$query->rows) {
+                    
+					if(@$query->rows) {
                         $data['refunds'] = $query->rows;
                     }
                     else {
                         $data['refunds'] = array();
                     }
-
+				
                     if(!empty($order_info['payment_custom_field'])) {
                         $payment_custom_fields = is_array($order_info['payment_custom_field'])
                             ? $order_info['payment_custom_field'] : json_decode($order_info['payment_custom_field'], true);
@@ -78,7 +80,8 @@
                     if($data['refunds']) {
                         foreach($data['refunds'] as $key => $refund) {
                             $data['remainingTotal'] -= $refund['amount'];
-                            // present amounts as formated minus values
+                            
+							// present amounts as formated minus values
                             $data['refunds'][$key]['amount_curr'] = '-' . $this->currency->format(
                                 $refund['amount'],
                                 $order_info['currency_code'],
@@ -130,19 +133,27 @@
                     else {
                         $sc_refunds = array();
                     }
-
-                    if(is_array($sc_refunds) && $sc_refunds) {
+				
+                    if(is_array($sc_refunds) && !empty($sc_refunds)) {
                         foreach($sc_refunds as $ref) {
                             if(intval($ref['approved']) == 1) {
 								$refunds_sum += $ref['amount'];
 							}
                         }
-
-                        $data['orders'][$key]['total'] = $this->currency->format(
+						
+						$formated_total = '<del>' . $this->currency->format(
+                            $order['total'],
+                            $order['currency_code'],
+                            $order['currency_value']
+                        ) . '</del>';
+				
+                        $formated_total .= '&nbsp;' . $this->currency->format(
                             ($order['total'] - $refunds_sum),
                             $order['currency_code'],
                             $order['currency_value']
                         );
+				
+						$data['orders'][$key]['total'] = $formated_total;
                     }
                 }
                 // SC Modification END
