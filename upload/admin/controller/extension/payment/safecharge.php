@@ -26,10 +26,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 PRIMARY KEY (`id`),
                 KEY `orderId` (`orderId`),
                 KEY `approved` (`approved`),
-				UNIQUE KEY `transactionId` (`transactionId`)
-              ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-			
-			CREATE UNIQUE INDEX ref_per_order ON sc_refunds (orderId, transactionId);";
+				UNIQUE KEY `ref_per_order` (`orderId`, `transactionId`)
+			) ENGINE=MyISAM DEFAULT CHARSET=utf8;";
         
         $this->db->query($q);
         

@@ -100,9 +100,9 @@
                     
                     <div class="col-sm-10">
                         <select class="form-control" name="<?= $settigs_prefix; ?>payment_action">
-                            <option value="Sale" <?php if (@$data[$settigs_prefix . 'payment_action'] == "Sale"): ?>
+                            <option value="Sale" <?php if (@strtolower($data[$settigs_prefix . 'payment_action']) == "sale"): ?>
 									selected="selected"<?php endif; ?>>Authorize and Capture</option>
-                            <option value="Auth" <?php if (@$data[$settigs_prefix . 'payment_action'] == "Auth"): ?>
+                            <option value="Auth" <?php if (@strtolower($data[$settigs_prefix . 'payment_action']) == "auth"): ?>
 									selected="selected"<?php endif; ?>>Authorize</option>
                         </select>
                     </div>

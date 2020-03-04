@@ -357,11 +357,11 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function process_payment()
     {
-        SC_CLASS::create_log('process_payment()');
-        
         $post			= $this->request->post;
 		$ctr_file_path	= SafeChargeVersionResolver::get_ctr_file_path();
 		$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+		
+		SC_CLASS::create_log($post, 'process_payment()');
 		
 		$success_url    = $this->url->link($ctr_file_path . '/success');
 		$pending_url	= $this->url->link($ctr_file_path . '/success');

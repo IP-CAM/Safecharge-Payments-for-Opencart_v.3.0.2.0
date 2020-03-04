@@ -43,7 +43,7 @@
     }
 
 	#sc_apms * {
-		font-family: 'Nunito Sans' !important;
+		font-family: 'arial' !important;
 		font-size: 13px;
 	}
 	
@@ -293,7 +293,7 @@
                     iconColor: "#c4f0ff",
                     color: "#000",
                     fontWeight: 500,
-                    fontFamily: "Nunito Sans",
+                    fontFamily: "arial",
                     fontSize: '12px',
                     fontSmoothing: "antialiased",
                     ":-webkit-autofill": {
