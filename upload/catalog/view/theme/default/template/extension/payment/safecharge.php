@@ -275,7 +275,7 @@
 		var fields = sfc.fields({
 			locale: "<?= $data['scLocale'] ?>",
 			fonts : [{
-				cssUrl: 'https://fonts.googleapis.com/css?family=Nunito+Sans:500&display=swap'
+				cssUrl: 'https://fonts.googleapis.com/css?family=Nunito+Sans:400&display=swap'
 			}]
 		});
 

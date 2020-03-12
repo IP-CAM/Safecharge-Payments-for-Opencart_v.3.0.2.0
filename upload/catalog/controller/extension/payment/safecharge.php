@@ -121,7 +121,8 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		# get APMs END
 
 		$data['scLocale']	= substr($this->get_locale(), 0, 2);
-		$data['action']		= $this->url->link($ctr_url_path . '/process_payment') . '&create_logs=' . ($settings['create_logs']);
+		$data['action']		= $this->url->link($ctr_url_path . '/process_payment')
+			. '&create_logs=' . ($settings['create_logs']) . '&order_id=' . $this->session->data['order_id'];
 		$data['ctr_path']	= $ctr_url_path;
 		$data['currency']	= $oo_params['currency'];
 		$data['amount']		= $oo_params['amount'];
@@ -158,23 +159,39 @@ class ControllerExtensionPaymentSafeCharge extends Controller
         
         $this->load->model('checkout/order');
         
-        $arr			= explode("_", @$_REQUEST['invoice_id']);
-		$order_id		= $arr[0];
+		if(!empty($this->request->get['order_id'])) {
+			$order_id = intval($this->request->get['order_id']);
+		}
+		elseif(!empty($_REQUEST['invoice_id'])) {
+			$arr		= explode("_", $_REQUEST['invoice_id']);
+			$order_id	= intval($arr[0]);
+		}
+		else {
+			SC_CLASS::create_log(@$_REQUEST, 'Success Error - can not recognize order ID.');
+			$ctr_file_path	= SafeChargeVersionResolver::get_ctr_file_path();
+			
+            $this->response->redirect($this->url->link($ctr_file_path . '/fail'));
+		}
+		
+		
 		$order_info		= $this->model_checkout_order->getOrder($order_id);
         $settigs_prefix	= SafeChargeVersionResolver::get_settings_prefix();
         
-        if($order_info && $order_info['order_status_id'] == '0') {
+		SC_CLASS::create_log($order_info['order_status_id'], 'order_status_id');
+		SC_CLASS::create_log($this->config->get($settigs_prefix . 'pending_status_id'), 'config pending_status_id');
+		
+        if(isset($order_info['order_status_id']) && intval($order_info['order_status_id']) == 0) {
             $message =
-                'Payment process completed. Waiting for transaction status from safecharge. PPP_TransactionID = '
-                . @$_REQUEST['PPP_TransactionID'].', GW_TransactionID = '
-                . @$_REQUEST['TransactionID'];
+                'Payment process completed. Waiting for transaction status from safecharge.'
+				. '<br/>PPP_TransactionID = ' . @$_REQUEST['PPP_TransactionID']
+				.'<br/>TransactionID = ' . @$_REQUEST['TransactionID'];
 
-                $this->model_checkout_order->addOrderHistory(
-                    $order_id,
-                    $this->config->get($settigs_prefix . 'pending_status_id'),
-                    $message,
-                    true
-                );
+			$this->model_checkout_order->addOrderHistory(
+				$order_id,
+				$this->config->get($settigs_prefix . 'pending_status_id'),
+				$message,
+				true
+			);
         }
         
         $this->response->redirect($this->url->link('checkout/success'));
@@ -188,8 +205,18 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 	{
         SC_CLASS::create_log(@$_REQUEST, 'Order FAIL: ');
         
-		$arr = explode("_", @$_REQUEST['invoice_id']);
-		$order_id  = intval($arr[0]);
+		if(!empty($this->request->get['order_id'])) {
+			$order_id = intval($this->request->get['order_id']);
+		}
+		elseif(!empty($_REQUEST['invoice_id'])) {
+			$arr		= explode("_", $_REQUEST['invoice_id']);
+			$order_id	= intval($arr[0]);
+		}
+		else {
+			$this->session->data['error']= 'Payment Failed. Please try again. ';
+			$this->response->redirect($this->url->link('checkout/cart'));
+		}
+		
 		$this->load->model('checkout/order');
 		$order_info = $this->model_checkout_order->getOrder($order_id);
 
@@ -236,39 +263,42 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             exit;
         }
         
-        $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+        $settigs_prefix	= SafeChargeVersionResolver::get_settings_prefix();
+		$order_id		= 0;
         
         $this->load->model('checkout/order');
 		
 		SC_CLASS::create_log($_REQUEST['transactionType']);
         
         # Sale and Auth
-        if(
-            isset($_REQUEST['transactionType'], $_REQUEST['invoice_id'])
-            && in_array($_REQUEST['transactionType'], array('Sale', 'Auth'))
-        ) {
-			$order_id = 0;
-            
+        if(in_array($_REQUEST['transactionType'], array('Sale', 'Auth'))) {
+			if(empty($_REQUEST['merchant_unique_id']) or ! is_numeric($_REQUEST['merchant_unique_id'])) {
+				SC_CLASS::create_log('Sale/Auth DMN Error - merchant_unique_id (order id) is empty or not numeric.');
+                echo 'Sale/Auth DMN Error - invalid merchant_unique_id (order id).';
+                exit;
+			}
+			
+			$order_id = intval($_REQUEST['merchant_unique_id']);
+			SC_CLASS::create_log($order_id, '$order_id');
+			
 			try {
-				$order_id = intval(@$_REQUEST['merchant_unique_id']);
-                $order_info = $this->model_checkout_order->getOrder($order_id);
-                
-                $order_status_id = intval($order_info['order_status_id']);
-				
-				SC_CLASS::create_log($order_status_id, 'Current Order status:');
-				SC_CLASS::create_log($req_status, 'Incoming Order status:');
-				
-				// 5 => Complete
-                if($order_status_id != 5) {
-					$this->update_custom_payment_fields($order_id);
-                    $this->change_order_status($order_id, $req_status, $_REQUEST['transactionType']);
-                }
+				$order_info			= $this->model_checkout_order->getOrder($order_id);
+				$order_status_id	= intval($order_info['order_status_id']);
             }
             catch (Exception $ex) {
                 SC_CLASS::create_log($ex->getMessage(), 'Sale DMN Exception: ');
                 echo 'DMN Exception: ' . $ex->getMessage();
                 exit;
             }
+			
+			SC_CLASS::create_log($order_status_id, 'Current Order status:');
+			SC_CLASS::create_log($req_status, 'Incoming Order status:');
+
+			// 5 => Complete
+			if($order_status_id != 5) {
+				$this->update_custom_payment_fields($order_id);
+				$this->change_order_status($order_id, $req_status, $_REQUEST['transactionType']);
+			}
             
             echo 'DMN received.';
             exit;
@@ -357,20 +387,21 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     public function process_payment()
     {
-        $post			= $this->request->post;
+		SC_CLASS::create_log('process_payment()');
+		
 		$ctr_file_path	= SafeChargeVersionResolver::get_ctr_file_path();
-		$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
 		
-		SC_CLASS::create_log($post, 'process_payment()');
+		$this->load->model('checkout/order');
+		$this->order_info = $this->model_checkout_order->getOrder($this->request->get['order_id']);
 		
-		$success_url    = $this->url->link($ctr_file_path . '/success');
-		$pending_url	= $this->url->link($ctr_file_path . '/success');
-		$error_url      = $this->url->link($ctr_file_path . '/fail');
+		$success_url    = $this->url->link($ctr_file_path . '/success') . '&order_id=' . $this->request->get['order_id'];
+		$pending_url	= $this->url->link($ctr_file_path . '/success') . '&order_id=' . $this->request->get['order_id'];
+		$error_url      = $this->url->link($ctr_file_path . '/fail') . '&order_id=' . $this->request->get['order_id'];
 		$back_url       = $this->url->link('checkout/checkout', '', true);
 		$notify_url     = $this->url->link($ctr_file_path . '/callback&create_logs='
-			. $this->session->data['create_logs']);
+			. $this->request->get['create_logs']);
 		
-        if(empty($post['payment_method_sc'])) {
+        if(empty($this->request->post['payment_method_sc'])) {
             SC_CLASS::create_log('process_payment - payment_method_sc problem');
             
             $this->response->redirect($error_url);
@@ -378,22 +409,20 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 		
 		# WebSDK
 		if(
-			in_array($post['payment_method_sc'], array('cc_card', 'dc_card'))
-			&& !empty($post['sc_transaction_id'])
+			in_array($this->request->post['payment_method_sc'], array('cc_card', 'dc_card'))
+			&& !empty($this->request->post['sc_transaction_id'])
 		) {
-			$this->finish_payment(
-				$this->session->data['order_id'], 
-				$post['sc_transaction_id'], 
-				$success_url, $error_url
-			);
+//			$this->finish_payment(
+//				$this->request->get['order_id'], 
+//				$this->request->post['sc_transaction_id'], 
+//				$success_url,
+//				$error_url
+//			);
+			
+			$this->response->redirect($success_url);
 		}
 		
 		# APMs
-        $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
-		
-		$this->load->model('checkout/order');
-		$this->order_info = $this->model_checkout_order->getOrder($this->session->data['order_id']);
-		
         $this->language->load($ctr_file_path);
         $data['process_payment'] = $this->language->get('Processing the payment. Please, wait!');
         
@@ -420,12 +449,14 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			$state = $this->order_info['payment_zone_code'];
 		}
         
+		$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+		
 		$params = array(
 			'merchantId'        => $this->config->get($settigs_prefix . 'ppp_Merchant_ID'),
 			'merchantSiteId'    => $this->config->get($settigs_prefix . 'ppp_Merchant_Site_ID'),
 			'userTokenId'       => $this->order_info['email'],
-			'clientUniqueId'    => $this->session->data['order_id'],
-			'merchant_unique_id'=> $this->session->data['order_id'],
+			'clientUniqueId'    => $this->request->get['order_id'],
+			'merchant_unique_id'=> $this->request->get['order_id'],
 			'clientRequestId'   => $TimeStamp . '_' . uniqid(),
 			'currency'          => $this->order_info['currency_code'],
 			'amount'            => (string) $total_amount,
@@ -469,14 +500,14 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			),
 			'timeStamp'			=> $TimeStamp,
 			'webMasterID'       => 'OpenCart ' . VERSION,
-			'sessionToken'      => @$post['lst'],
+			'sessionToken'      => @$this->request->post['lst'],
 			'deviceDetails'     => SC_CLASS::get_device_details(),
 		);
 
 		$params['billingAddress'] = $params['userDetails'];
 		
 		$params['items'][0] = array(
-			'name'		=> $this->session->data['order_id'],
+			'name'		=> $this->request->get['order_id'],
 			'price'		=> $total_amount,
 			'quantity'	=> 1,
 		);
@@ -490,21 +521,24 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 
 		$endpoint_url = $this->config->get($settigs_prefix . 'test_mode') == 'no'
 			? SC_LIVE_PAYMENT_URL : SC_TEST_PAYMENT_URL;
-		$params['paymentMethod'] = $post['payment_method_sc'];
+		$params['paymentMethod'] = $this->request->post['payment_method_sc'];
 
-		if(isset($post[@$post['payment_method_sc']]) && is_array($post[$post['payment_method_sc']])) {
-			$params['userAccountDetails'] = $post[$post['payment_method_sc']];
+		if(
+			isset($this->request->post['payment_method_sc'], $this->request->post[$this->request->post['payment_method_sc']])
+			&& is_array($this->request->post[$this->request->post['payment_method_sc']])
+		) {
+			$params['userAccountDetails'] = $this->request->post[$this->request->post['payment_method_sc']];
 		}
             
 		$resp = SC_CLASS::call_rest_api($endpoint_url, $params);
 
 		if(!$resp) {
-			$this->response->redirect($post['error_url']);
+			$this->response->redirect($this->request->post['error_url']);
 		}
 
 		if($this->get_request_status($resp) == 'ERROR' || @$resp['transactionStatus'] == 'ERROR') {
 			$this->change_order_status(
-				intval($this->session->data['order_id']), 
+				intval($this->request->get['order_id']), 
 				'ERROR', 
 				@$resp['transactionType']
 			);
@@ -514,12 +548,12 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 
 		if(@$resp['transactionStatus'] == 'DECLINED') {
 			$this->change_order_status(
-				intval($this->session->data['order_id']), 
+				intval($this->request->get['order_id']), 
 				'DECLINED', 
 				@$resp['transactionType']
 			);
 
-			$this->response->redirect($post['error_url']);
+			$this->response->redirect($this->request->post['error_url']);
 		}
 
 		if($this->get_request_status($resp) == 'SUCCESS') {
@@ -529,15 +563,27 @@ class ControllerExtensionPaymentSafeCharge extends Controller
 			}
 		}
 
-		$this->finish_payment($resp['orderId'], $resp['transactionId'], $success_url, $error_url);
+//		$this->finish_payment($resp['orderId'], $resp['transactionId'], $success_url, $error_url);
+		$this->response->redirect($success_url);
     }
 	
+	/**
+	 * 
+	 * @param type $order_id
+	 * @param type $trans_id
+	 * @param type $success_url
+	 * @param type $error_url
+	 * 
+	 * @deprecated since now
+	 */
 	private function finish_payment($order_id, $trans_id, $success_url, $error_url)
 	{
+		SC_CLASS::create_log('finish_payment()');
+		
 		try {
-			$this->load->model('checkout/order');
-			
 			$settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
+			
+			SC_CLASS::create_log($this->order_info['order_status_id'], 'order_status_id');
 			
             if($this->order_info['order_status_id'] == $this->config->get($settigs_prefix . 'pending_status_id')) {
                 $this->model_checkout_order->addOrderHistory($order_id, 5, 'Order Completed.', false);
@@ -555,7 +601,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             else {
                 $this->model_checkout_order->addOrderHistory(
                     $order_id,
-                    $this->order_info['clientUniqueId'],
+                    $this->order_info['order_status_id'],
                     'Payment succsess.',
                     true
                 );
@@ -660,8 +706,6 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      */
     private function change_order_status($order_id, $status, $transactionType = '', $res_args = array())
     {
-        $settigs_prefix = SafeChargeVersionResolver::get_settings_prefix();
-        
         SC_CLASS::create_log(
             'Order ' . $order_id .' has Status: ' . $status,
             'Change_order_status(): '
@@ -672,8 +716,9 @@ class ControllerExtensionPaymentSafeCharge extends Controller
             $request = $res_args;
         }
         
-        $message = '';
-        $send_message = true;
+		$settigs_prefix	= SafeChargeVersionResolver::get_settings_prefix();
+        $message		= '';
+        $send_message	= true;
         
         $this->load->model('checkout/order');
         $order_info = $this->model_checkout_order->getOrder($order_id);
@@ -927,10 +972,11 @@ class ControllerExtensionPaymentSafeCharge extends Controller
      * @param int $order_id
      * @param array $order_info
      * @param array $data - assocc array to save
-     * @param bool $overwrite - overwrite the data or append it
      */
-    private function update_custom_payment_fields($order_id, $data = array(), $overwrite = true)
+    private function update_custom_payment_fields($order_id, $data = array())
     {
+		SC_CLASS::create_log('update_custom_payment_fields');
+		
         try {
             // TODO pass the fields instead to get them. We got them at the plece where
             // we call this method.
@@ -939,6 +985,7 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 . "WHERE order_id = " . intval($order_id));
 
             $payment_custom_fields = $query->row['payment_custom_field'];
+			SC_CLASS::create_log($payment_custom_fields, '$payment_custom_fields');
 
             // get the fields as array
             if($payment_custom_fields && is_string($payment_custom_fields)) {
@@ -957,22 +1004,10 @@ class ControllerExtensionPaymentSafeCharge extends Controller
                 }
             }
 
-            if($overwrite) {
-                foreach($data as $key => $val) {
-                    $payment_custom_fields[$key] = $val;
-                }
-            }
-            // append data
-            else {
-                foreach($data as $key => $val) {
-                    $payment_custom_fields[$key][] = $val;
-                }
-            }
-
             // update custom payment fields
             $this->db->query(
                 "UPDATE `" . DB_PREFIX . "order` SET `payment_custom_field` = '"
-                . json_encode($payment_custom_fields) . "' WHERE `order_id` = " . $order_id
+                . json_encode($data) . "' WHERE `order_id` = " . $order_id
             );
         }
         catch (Exception $e) {
