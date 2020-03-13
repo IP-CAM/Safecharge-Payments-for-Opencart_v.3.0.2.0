@@ -42,11 +42,6 @@
         font-size: 12px;
     }
 
-	#sc_apms * {
-		font-family: 'arial' !important;
-		font-size: 13px;
-	}
-	
     #sc_apms_list, #sc_upos_list {
         margin-top: 15px;
         box-shadow: 0 2px 4px 0 rgba(0,0,0,0.19);
@@ -121,6 +116,8 @@
         padding-left: 0px !important;
         padding-right: 0px !important;
         width: 100%;
+		font-family: 'arial' !important;
+		font-size: 15px !important;
     }
 	
 	#safechargesubmit input::placeholder {
@@ -294,7 +291,7 @@
                     color: "#000",
                     fontWeight: 500,
                     fontFamily: "arial",
-                    fontSize: '12px',
+                    fontSize: '14px',
                     fontSmoothing: "antialiased",
                     ":-webkit-autofill": {
                         color: "#fce883"
@@ -339,7 +336,7 @@
 		// show Loading... button
 		$('#sc_validate_submit_btn')
 			.prop('disabled', true)
-			.val("<?= @$data['sc_btn_loading']; ?>");
+			.html("<?= @$data['sc_btn_loading']; ?>");
 
 		var formValid = true;
 
@@ -359,21 +356,22 @@
                     console.log(resp);
 
                     if(typeof resp.result != 'undefined') {
-                        if(resp.result == 'APPROVED' && resp.transactionId != 'undefined') {
+                        if(resp.result == 'APPROVED' && typeof resp.transactionId != 'undefined') {
 							$('#sc_transaction_id').val(resp.transactionId);
                             $('form#safechargesubmit').submit();
                             return;
                         }
                         else if(resp.result == 'DECLINED') {
                             alert("<?= $data['sc_order_declined']; ?>");
-							
 							scOpenNewOrder();
                         }
                         else {
-                            if(resp.errorDescription != 'undefined' && resp.errorDescription !== '') {
+							scOpenNewOrder();
+							
+                            if(typeof resp.errorDescription != 'undefined' && resp.errorDescription !== '') {
                                 alert(resp.errorDescription);
                             }
-                            else if('undefined' != resp.reason && '' !== resp.reason) {
+                            else if(typeof resp.reason != 'undefined' && '' !== resp.reason) {
                                 alert(resp.reason);
                             }
                             else {
@@ -382,16 +380,18 @@
 							
 							$('#sc_validate_submit_btn')
 								.prop('disabled', false)
-								.val("<?= @$data['button_confirm']; ?>");
+								.html("<?= @$data['button_confirm']; ?>");
                         }
                     }
                     else {
+						scOpenNewOrder();
+					
                         alert("<?= $data['sc_order_error']; ?>");
                         console.error('Error with SDK response: ' + resp);
 						
 						$('#sc_validate_submit_btn')
 							.prop('disabled', false)
-							.val("<?= @$data['button_confirm']; ?>");
+							.html("<?= @$data['button_confirm']; ?>");
                     }
                 });
 			}
@@ -458,7 +458,7 @@
 				
 				$('#sc_validate_submit_btn')
 					.prop('disabled', false)
-					.val("<?= @$data['button_confirm']; ?>");
+					.html("<?= @$data['button_confirm']; ?>");
 			}
 			else {
 				window.location.reload();
@@ -473,7 +473,7 @@
 
 		$('#sc_validate_submit_btn')
 			.prop('disabled', false)
-			.val("<?= @$data['button_confirm']; ?>");
+			.html("<?= @$data['button_confirm']; ?>");
 	}
 
 	$(function() {
