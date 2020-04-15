@@ -105,9 +105,15 @@ class SC_CLASS
                         if($d == 'linux' || $d == 'windows') {
                             $device_details['deviceType'] = 'DESKTOP';
                         }
-                        else {
-                            $device_details['deviceType'] = $d;
-                        }
+                        else if('mobile' === $d) {
+							$device_details['deviceType'] = 'SMARTPHONE';
+						}
+						else if('tablet' === $d) {
+							$device_details['deviceType'] = 'TABLET';
+						}
+						else {
+							$device_details['deviceType'] = 'TV';
+						}
 
                         break;
                     }
