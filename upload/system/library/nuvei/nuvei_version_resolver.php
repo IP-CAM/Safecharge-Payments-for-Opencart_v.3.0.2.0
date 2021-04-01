@@ -1,14 +1,11 @@
 <?php
 
 /**
- * class SafeChargeVersionResolver
+ * class NuveiVersionResolver
  * 
  * Try to resolve different versions problem in the plugin here
- * 
- * 2018-09
- * SafeCharge
  */
-class SafeChargeVersionResolver
+class NuveiVersionResolver
 {
     public static function get_token_name()
     {
@@ -31,10 +28,10 @@ class SafeChargeVersionResolver
     public static function get_ctr_file_path()
     {
         if (version_compare(VERSION, '2.2.0.0', '>')) {
-            return 'extension/payment/safecharge';
+            return 'extension/payment/nuvei';
         }
 		
-        return 'payment/safecharge';
+        return 'payment/nuvei';
     }
     
     public static function get_adm_ctr_text_extension_key()
@@ -58,40 +55,13 @@ class SafeChargeVersionResolver
         return 'extension/payment';
     }
     
-    public static function get_tpl_extension()
-    {
-        if (version_compare(VERSION, '2.2.0.0', '>')) {
-            return '';
-        }
-		
-        return '.tpl';
-    }
-    
     public static function get_settings_prefix()
     {
         if (version_compare(VERSION, '3.0.0.0', '>')) {
-            return 'payment_safecharge_';
+            return 'payment_nuvei_';
         }
 		
-        return 'safecharge_';
-    }
-    
-    /**
-     * Function get_catalog_tpl
-     * 
-     * As we know v3+ is smarter and it is easy to to get template
-     * For v2 you need to add extension of the file and part of the path.
-     * 
-     * @param string $curr_tpl - part of the path and file
-     * @return string
-     */
-    public static function get_catalog_tpl_path($curr_tpl)
-    {
-        if (version_compare(VERSION, '3.0.0.0', '>')) {
-            return $curr_tpl;
-        }
-		
-        return 'default/template/' . $curr_tpl . '.tpl';
+        return 'nuvei_';
     }
     
 }
