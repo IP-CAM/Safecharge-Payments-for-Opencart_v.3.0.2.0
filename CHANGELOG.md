@@ -4,6 +4,7 @@
 
 ### 2.0
 ```
+	* In Admin > Seles > Orders > View, History table, use full date.
 	* For Auth, Sale and Settle transactions, save the Transaction ID in oc_order.custom_filed.
 	* Revert order_status_id default value to 0.
 	* Added page blocker after click on Pay button.

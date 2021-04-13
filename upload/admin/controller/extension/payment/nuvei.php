@@ -579,8 +579,6 @@ class ControllerExtensionPaymentNuvei extends Controller
         $time               = date('YmdHis', time());
         $last_allowed_trans = array();
         
-        NUVEI_CLASS::create_log($data);
-        
         foreach(array_reverse($data['payment_custom_field']) as $tr_data) {
             if(
                 'settle' == $this->request->post['action']

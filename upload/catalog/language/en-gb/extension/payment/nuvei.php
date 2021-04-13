@@ -41,7 +41,7 @@ $_['The amount has been authorized and wait for Settle.']       = 'The amount ha
 $_['The amount has been authorized and captured by Nuvei.']     = 'The amount has been authorized and captured by Nuvei.';
 $_['The amount has been captured by Nuvei.']                    = 'The amount has been captured by Nuvei.';
 $_['CPanel Refund detected. Please, create a manual refund!']   = 'CPanel Refund detected. Please, create a manual refund!';
-$_['Attention - the Order total is ']                           = 'Attention - the Order total is ';
+$_['Attention - the Order total is ']                           = '<b>Attention</b> - the Order total is ';
 $_[', but the Captured amount is ']                             = ', but the Captured amount is ';
 $_['nuvei_payment_complete']                                    = 'Payment process completed. Waiting for transaction status from Nuvei.';
 

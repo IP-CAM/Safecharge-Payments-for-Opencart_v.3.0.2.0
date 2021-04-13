@@ -67,6 +67,21 @@
         </operation>
     </file>
 	
+	<!-- In the Order Info, History table use full date for the comments -->
+	<file path="admin/controller/sale/order.php">
+        <operation>
+            <search><![CDATA[
+                'date_added' => date($this->language->get('date_format_short'), strtotime($result['date_added']))
+            ]]></search>
+            
+            <add position="replace"><![CDATA[
+                # Nuvei Modification
+				'date_added' => date($this->language->get('datetime_format'), strtotime($result['date_added']))
+				# Nuvei Modification END
+            ]]></add>
+        </operation>
+    </file>
+	
 	<!-- modify sale/order_info.twig file -->
 	<file path="admin/view/template/sale/order_info.twig">
 		<operation>

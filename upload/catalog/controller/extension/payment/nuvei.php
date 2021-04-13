@@ -198,24 +198,14 @@ class ControllerExtensionPaymentNuvei extends Controller
 		
 		$this->order_info = $this->model_checkout_order->getOrder($order_id);
         
-		NUVEI_CLASS::create_log(
-			array(
-				'order_status_id'   => $this->order_info['order_status_id'],
-				'pending_status_id' => $this->config->get($this->prefix . 'pending_status_id'),
-			),
-			'success() config pending_status_id'
-		);
-		
         if(
             isset($this->order_info['order_status_id'])
-            && intval($this->order_info['order_status_id']) == 0
+            && (int) $this->order_info['order_status_id'] == 0
         ) {
-            $message = $this->language->get('nuvei_payment_complete');
-
 			$this->model_checkout_order->addOrderHistory(
 				$order_id,
-				$this->config->get($this->prefix . 'pending_status_id'),
-				$message,
+                $this->order_info['order_status_id'],
+				$this->language->get('nuvei_payment_complete'),
 				true
 			);
         }
@@ -270,11 +260,16 @@ class ControllerExtensionPaymentNuvei extends Controller
     {
         NUVEI_CLASS::create_log((isset($_REQUEST) ? $_REQUEST : ''), 'DMN request');
         
-        //die('manually stoped');
-        
 		$order_id                       = 0;
         $this->prefix                   = NuveiVersionResolver::get_settings_prefix();
         $_SESSION['nuvei_test_mode']    = $this->config->get($this->prefix . 'test_mode');
+        
+        ### Manual stop DMN is possible only in test mode
+//        if('yes' == $_SESSION['nuvei_test_mode']) {
+//            NUVEI_CLASS::create_log(http_build_query(@$_REQUEST), 'DMN request query');
+//            die('manually stoped');
+//        }
+        ### Manual stop DMN END
         
         $trans_type             = NUVEI_CLASS::get_param('transactionType', FILTER_SANITIZE_STRING);
         $trans_id               = (int) NUVEI_CLASS::get_param('TransactionID');
@@ -345,7 +340,7 @@ class ControllerExtensionPaymentNuvei extends Controller
             }
         }
         catch (Exception $ex) {
-            $this->return_message('Sale DMN Exception', $ex->getMessage());
+            $this->return_message('DMN Exception', $ex->getMessage());
         }
         
         // do not override Order status
@@ -426,33 +421,19 @@ class ControllerExtensionPaymentNuvei extends Controller
         }
         # add new data into payment_custom_field END
 		
-        // check for different Order Amount
-        if(in_array($trans_type, array('Sale', 'Settle'))) {
-            $order_total    = round((float) $this->order_info['total'], 2);
-            $dmn_total      = round((float) NUVEI_CLASS::get_param('totalAmount'), 2);
-            
-            $msg = $this->language->get('Attention - the Order total is ') 
-                . $this->order_info['currency_code'] . $order_total
-                . $this->language->get(', but the Captured amount is ')
-                . NUVEI_CLASS::get_param('currency', FILTER_SANITIZE_STRING)
-                . $dmn_total . '.';
-            
-            if($order_total != $dmn_total) {
-                $this->model_checkout_order->addOrderHistory(
-                    $order_id,
-                    $this->order_info['order_status_id'],
-                    $msg,
-                    false
-                );
-            }
-        }
-        
         # Sale and Auth
         if(in_array($trans_type, array('Sale', 'Auth'))) {
+            NUVEI_CLASS::create_log(
+                array(
+                    'order_status_id' => $this->order_info['order_status_id'],
+                    'default complete status' => $this->config->get($this->prefix . 'order_status_id'),
+                ),
+                'DMN Sale/Auth compare order status and default complete status:'
+            );
+            
 			// if is different than the default Complete status
-			if(
-                (int) $this->order_info['order_status_id'] 
-                    != $this->config->get($this->prefix . 'order_status_id')
+			if($this->order_info['order_status_id'] 
+                != $this->config->get($this->prefix . 'order_status_id')
             ) {
 				$this->change_order_status($order_id, $req_status, $trans_type);
 			}
@@ -801,6 +782,7 @@ class ControllerExtensionPaymentNuvei extends Controller
         $payment_method = NUVEI_CLASS::get_param('payment_method', FILTER_SANITIZE_STRING);
         $total_amount   = (float) NUVEI_CLASS::get_param('totalAmount');
         $status_id      = $this->order_info['order_status_id'];
+        $order_total    = round((float) $this->order_info['total'], 2);
         
         $comment_details = '<br/>' 
             . $this->language->get('Transaction ID: ') . $trans_id . '<br/>'
@@ -907,6 +889,17 @@ class ControllerExtensionPaymentNuvei extends Controller
                     $message = $this->language->get('The amount has been authorized and captured by Nuvei.');
                 }
                 
+                // check for different Order Amount
+                if(in_array($transactionType, array('Sale', 'Settle')) && $order_total != $total_amount) {
+                    $msg = $this->language->get('Attention - the Order total is ') 
+                        . $this->order_info['currency_code'] . ' ' . $order_total
+                        . $this->language->get(', but the Captured amount is ')
+                        . NUVEI_CLASS::get_param('currency', FILTER_SANITIZE_STRING)
+                        . ' ' . $total_amount . '.';
+
+                    $this->model_checkout_order->addOrderHistory($order_id, $status_id, $msg, false);
+                }
+                
 				$message .= $comment_details;
                 break;
 
@@ -999,8 +992,16 @@ class ControllerExtensionPaymentNuvei extends Controller
 //                break;
                 
             default:
-                NUVEI_CLASS::create_log($status, 'Unexisting status: ');
+                NUVEI_CLASS::create_log($status, 'Unexisting status:');
         }
+        
+        NUVEI_CLASS::create_log(
+            array(
+                'order_id'  => $order_id,
+                'status_id' => $status_id,
+            ),
+            'addOrderHistory()'
+        );
         
         $this->model_checkout_order->addOrderHistory($order_id, $status_id, $message, $send_message);
     }
