@@ -331,6 +331,7 @@ class ControllerExtensionPaymentNuvei extends Controller
             $this->order_info = $this->model_checkout_order->getOrder($order_id);
             
             if(!$this->order_info || empty($this->order_info)) {
+                http_response_code(400);
                 $this->return_message('DMN error - there is no order info.');
             }
             
@@ -340,6 +341,7 @@ class ControllerExtensionPaymentNuvei extends Controller
             }
         }
         catch (Exception $ex) {
+            http_response_code(400);
             $this->return_message('DMN Exception', $ex->getMessage());
         }
         

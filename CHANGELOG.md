@@ -4,6 +4,11 @@
 
 ### 2.0
 ```
+	* When the DMN can not find the Order or code throw an exception, return status 400 to the DMN sender.
+```
+
+### 2.0
+```
 	* In Admin > Seles > Orders > View, History table, use full date.
 	* For Auth, Sale and Settle transactions, save the Transaction ID in oc_order.custom_filed.
 	* Revert order_status_id default value to 0.
