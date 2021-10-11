@@ -131,6 +131,8 @@
                     
                     <div class="col-sm-10">
                         <select class="form-control" name="<?= $this->prefix; ?>use_upos">
+                            <option value="" <?php if (@$data[$this->prefix . 'use_upos'] == ""): ?>selected="selected"<?php endif; ?>><?= $data['nuvei_choose_option']; ?></option>
+                            
                             <option value="no" <?php if (@$data[$this->prefix . 'use_upos'] == 'no'): ?>selected="selected"<?php endif; ?>><?= $data['entry_no']; ?></option>
                             
                             <option value="yes" <?php if (@$data[$this->prefix . 'use_upos'] == 'yes'): ?>selected="selected"<?php endif; ?>><?= $data['entry_yes']; ?></option>

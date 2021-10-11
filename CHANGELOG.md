@@ -1,8 +1,13 @@
 # OpenCart Nuvei Payments Module
 
 ---
+### 2.2
+```
+	* In the settings "Test mode" was changed to "Sandbox Mode".
+	* Added the missing third option for the "Enable UPOs" - "Please choose...".
+```
 
-### 2.0
+### 2.1
 ```
 	* When the DMN can not find the Order or code throw an exception, return status 400 to the DMN sender.
 ```

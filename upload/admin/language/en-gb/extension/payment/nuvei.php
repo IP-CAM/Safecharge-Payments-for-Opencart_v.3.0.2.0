@@ -20,7 +20,7 @@ $_['entry_payment_action']  = 'Payment Action:';
 $_['entry_option_cashier']  = 'Hosted Payment Page';
 $_['entry_option_rest']     = 'Nuvei API';
 
-$_['entry_test_mode']		    = 'Test mode:';
+$_['entry_test_mode']		    = 'Sandbox mode:';
 $_['entry_use_upos']		    = 'Enable UPOs:';
 $_['entry_force_http']		    = 'Use http Notify URL:';
 $_['entry_create_logs']		    = 'Enable Logs:';

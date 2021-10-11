@@ -8,7 +8,7 @@
  * @author Nuvei
  */
 
-define('NUVEI_PLUGIN_V',        '2.1');
+define('NUVEI_PLUGIN_V',        '2.2');
 
 define('NUVEI_LIVE_URL_BASE',   'https://secure.safecharge.com/ppp/api/v1/');
 define('NUVEI_TEST_URL_BASE',   'https://ppp-test.safecharge.com/ppp/api/v1/');
